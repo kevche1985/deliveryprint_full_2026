@@ -13,6 +13,7 @@ import { useToast } from "@/hooks/use-toast"
 import { useDigitalCart } from "@/lib/digital-cart-context"
 import DigitalProductChoiceModal from "@/components/digital-product-choice-modal"
 import { supabase } from "@/lib/supabase"
+import { LOGO_PROMPT_TEMPLATE, buildPromptFromTemplate } from "@/lib/ai-prompts"
 
 const industries = [
   "Technology",
@@ -52,6 +53,7 @@ export default function LogoGeneratorPage() {
   const { toast } = useToast()
   const { addItem } = useDigitalCart()
   const [prompt, setPrompt] = useState("")
+  const [brandName, setBrandName] = useState("")
   const [selectedIndustry, setSelectedIndustry] = useState("")
   const [selectedStyle, setSelectedStyle] = useState("")
   const [selectedColors, setSelectedColors] = useState("")
@@ -84,17 +86,17 @@ export default function LogoGeneratorPage() {
     setGeneratedLogo(null)
     setDesignId(null)
 
-    // Build the complete prompt
-    let fullPrompt = prompt
-    if (selectedIndustry) {
-      fullPrompt += ` Industry: ${selectedIndustry}.`
+    const backendPrompt = {
+      ...LOGO_PROMPT_TEMPLATE,
+      input_parameters: {
+        brand_name: brandName,
+        logo_description: prompt,
+        industry: selectedIndustry,
+        style: selectedStyle,
+        color_preference: selectedColors,
+      },
     }
-    if (selectedStyle) {
-      fullPrompt += ` Style: ${selectedStyle}.`
-    }
-    if (selectedColors) {
-      fullPrompt += ` Color scheme: ${selectedColors}.`
-    }
+    const fullPrompt = buildPromptFromTemplate(backendPrompt, backendPrompt.input_parameters)
 
     try {
       const response = await fetch("/api/ai/generate", {
@@ -104,6 +106,7 @@ export default function LogoGeneratorPage() {
         },
         body: JSON.stringify({
           prompt: fullPrompt,
+          backendPrompt,
           type: "logo",
           userId: user.id,
         }),
@@ -283,6 +286,18 @@ export default function LogoGeneratorPage() {
                 <CardDescription>Describe your vision and preferences</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
+                <div className="space-y-2">
+                  <Label htmlFor="brandName">Brand Name</Label>
+                  <Textarea
+                    id="brandName"
+                    placeholder="Enter your brand name"
+                    value={brandName}
+                    onChange={(e) => setBrandName(e.target.value)}
+                    rows={1}
+                    className="resize-none"
+                    disabled={isGenerating}
+                  />
+                </div>
                 <div className="space-y-2">
                   <Label htmlFor="prompt">Logo Description</Label>
                   <Textarea

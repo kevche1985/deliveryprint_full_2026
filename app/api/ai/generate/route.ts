@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { buildPromptFromTemplate } from "@/lib/ai-prompts"
 import { z } from "zod"
 
 // Explicitly set this as a server-side only route
@@ -12,7 +13,8 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const Schema = z
       .object({
-        prompt: z.string().min(3),
+        prompt: z.string().min(3).optional(),
+        backendPrompt: z.record(z.any()).optional(),
         type: z.enum(["logo", "image", "font"]),
         userId: z.string().min(1),
       })
@@ -21,14 +23,18 @@ export async function POST(request: NextRequest) {
     if (!parsed.success) {
       return NextResponse.json({ error: "Invalid request", details: parsed.error.flatten() }, { status: 400 })
     }
-    const { prompt, type, userId } = parsed.data
+    const { prompt, backendPrompt, type, userId } = parsed.data
+
+    if (!prompt && !backendPrompt) {
+      return NextResponse.json({ error: "Missing prompt" }, { status: 400 })
+    }
 
     console.log("Request body:", { type, userId, promptLength: prompt?.length })
 
     // Validate required fields
     // Fields validated by schema above
 
-    console.log("Processing AI generation:", { type, userId, promptLength: prompt.length })
+    console.log("Processing AI generation:", { type, userId, promptLength: (prompt || "").length })
 
     try {
       // Get API key from environment variable - NEVER hardcode API keys
@@ -59,7 +65,7 @@ export async function POST(request: NextRequest) {
           Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          input: prompt,
+          input: prompt || buildPromptFromTemplate(backendPrompt as any, (backendPrompt as any)?.input_parameters || {}),
         }),
       })
 
@@ -75,13 +81,13 @@ export async function POST(request: NextRequest) {
       }
 
       // Enhance prompt based on type
-      let enhancedPrompt = prompt
+      let enhancedPrompt = prompt || buildPromptFromTemplate(backendPrompt as any, (backendPrompt as any)?.input_parameters || {})
       if (type === "logo") {
-        enhancedPrompt = `Create a professional logo design: ${prompt}. The logo should be clean, memorable, and work well at different sizes. Use a transparent or white background.`
+        enhancedPrompt = enhancedPrompt || `Create a professional logo design: ${prompt}. The logo should be clean, memorable, and work well at different sizes. Use a transparent or white background.`
       } else if (type === "image") {
-        enhancedPrompt = `Create a high-quality image: ${prompt}. The image should be detailed, visually appealing, and suitable for printing.`
+        enhancedPrompt = enhancedPrompt || `Create a high-quality image: ${prompt}. The image should be detailed, visually appealing, and suitable for printing.`
       } else if (type === "font") {
-        enhancedPrompt = `Create a custom typography design for the text: ${prompt}. The font should be unique, readable, and reflect the character of the text.`
+        enhancedPrompt = enhancedPrompt || `Create a custom typography design for the text: ${prompt}. The font should be unique, readable, and reflect the character of the text.`
       }
 
       console.log("Enhanced prompt created, sending to OpenAI...")
@@ -138,9 +144,10 @@ export async function POST(request: NextRequest) {
               thumbnail_url: imageUrl,
               user_id: userId,
               design_data: {
-                originalPrompt: prompt,
+                originalPrompt: prompt || null,
                 enhancedPrompt,
                 revisedPrompt,
+                backendPrompt: backendPrompt || null,
                 originalUrl: imageUrl,
                 watermarkedUrl: imageUrl,
                 type,

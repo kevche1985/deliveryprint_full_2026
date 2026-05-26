@@ -1,0 +1,5 @@
+{
+  "keepUsers": ["admin@example.com", "operator@example.com"],
+  "cutoffDays": 7
+}
+

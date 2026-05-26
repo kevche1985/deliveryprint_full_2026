@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
-import { Loader2, CheckCircle, AlertCircle, Printer, FileText, ArrowRight, Eye } from "lucide-react"
+import { Loader2, CheckCircle, AlertCircle, Printer, FileText, ArrowRight, Eye, Download } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import Link from "next/link"
 import { motion } from "framer-motion"
@@ -18,12 +18,16 @@ import type { Order, OrderItem } from "@/lib/database"
 import { track } from "@/lib/analytics"
 import DisputeModal from "@/components/dispute-modal"
 import { useLanguage } from "@/lib/language-context"
+import { useCart } from "@/lib/cart-context"
+import { useDigitalCart } from "@/lib/digital-cart-context"
 
 export default function OrderConfirmationPage() {
   const { id } = useParams()
   const searchParams = useSearchParams()
   const paymentStatus = searchParams.get("status") || "pending"
   const { user } = useAuth()
+  const { clearCart } = useCart()
+  const { clearCart: clearDigitalCart } = useDigitalCart()
   const { toast } = useToast()
   const { t } = useLanguage()
   const [order, setOrder] = useState<Order | null>(null)
@@ -41,6 +45,37 @@ export default function OrderConfirmationPage() {
   const [uploading, setUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [selectedFileName, setSelectedFileName] = useState<string>("")
+
+  // Ensure carts are cleared on successful confirmation even after redirects
+  useEffect(() => {
+    if (paymentStatus === "success") {
+      try {
+        clearCart()
+        clearDigitalCart()
+        // Remove legacy keys once for backwards compatibility
+        if (typeof window !== "undefined") {
+          try {
+            localStorage.removeItem("cart")
+            localStorage.removeItem("digitalCart")
+          } catch {}
+          try {
+            const keysToRemove: string[] = []
+            for (let i = 0; i < localStorage.length; i++) {
+              const key = localStorage.key(i)
+              if (!key) continue
+              if (key.startsWith("cart:") || key.startsWith("digitalCart:")) {
+                keysToRemove.push(key)
+              }
+            }
+            keysToRemove.forEach((k) => {
+              try { localStorage.removeItem(k) } catch {}
+            })
+          } catch {}
+        }
+      } catch {}
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     async function loadOrderData() {
@@ -319,7 +354,7 @@ export default function OrderConfirmationPage() {
             </>
           ) : (
             <>
-              <AlertCircle className="h-16 w-16 text-[#8B0000] mx-auto mb-4" />
+              <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />
               <h1 className="text-3xl font-bold text-gray-900 mb-2">{t("orders.receivedTitle")}</h1>
               <p className="text-xl text-gray-600">
                 {t("orders.receivedOrder")} <span className="font-semibold">{order.order_number}</span>
@@ -413,7 +448,21 @@ export default function OrderConfirmationPage() {
                               <p className="text-sm text-gray-500">{t("orders.quantity")}: {item.quantity}</p>
                             </div>
                           </div>
-                          <p className="font-medium">${(item.price * item.quantity).toFixed(2)}</p>
+                          <div className="text-right space-y-2">
+                            <p className="font-medium">${(item.price * item.quantity).toFixed(2)}</p>
+                            {(() => {
+                              const downloadUrl = (item as any).print_ready_file_url || (item as any).design_file_url
+                              if (!downloadUrl) return null
+                              return (
+                                <a href={downloadUrl} target="_blank" rel="noopener noreferrer" download>
+                                  <Button variant="outline" size="sm" className="inline-flex items-center gap-1">
+                                    <Download className="h-4 w-4" />
+                                    {t("orders.download")}
+                                  </Button>
+                                </a>
+                              )
+                            })()}
+                          </div>
                         </div>
                       ))
                     ) : (

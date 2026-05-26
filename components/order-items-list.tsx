@@ -2,6 +2,8 @@
 
 import { OrderItem } from '@/lib/database'
 import OrderItemImage from './order-item-image'
+import { Button } from '@/components/ui/button'
+import { Download } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { hasPrintFiles } from '@/lib/image-utils'
@@ -39,6 +41,16 @@ export default function OrderItemsList({ items, showOperatorTools = false }: Ord
               <div className="flex justify-between items-start">
                 <div className="flex-1">
                   <h3 className="font-semibold text-lg">{item.name}</h3>
+
+                  {(() => {
+                    const materialType =
+                      (item as any).material_type ||
+                      (item.customizations as any)?.material_type ||
+                      (item.customizations as any)?.specifications?.material ||
+                      null
+                    if (!materialType) return null
+                    return <p className="text-sm text-gray-600 mt-1">Material: {materialType}</p>
+                  })()}
                   
                   {/* Item Type Badges */}
                   <div className="flex gap-2 mt-2">
@@ -61,14 +73,31 @@ export default function OrderItemsList({ items, showOperatorTools = false }: Ord
                   )}
                 </div>
                 
-                {/* Price and Quantity */}
-                <div className="text-right">
+                {/* Price and Quantity + Download */}
+                <div className="text-right space-y-2">
                   <p className="text-lg font-semibold">
                     ${((item.price || 0) * (item.quantity || 1)).toFixed(2)}
                   </p>
                   <p className="text-sm text-gray-600">
                     ${(item.price || 0).toFixed(2)} × {item.quantity || 1}
                   </p>
+                  {(() => {
+                    const downloadUrl =
+                      item.design_file_url || (item as any)?.uploaded_file?.file_url || item.design_image_url || item.print_ready_file_url || null
+                    const fileLabel =
+                      (item as any).design_original_filename || (item as any)?.uploaded_file?.original_filename || "Download Design"
+                    if (!downloadUrl) {
+                      return <p className="text-xs text-red-600">No design file attached</p>
+                    }
+                    return (
+                      <a href={downloadUrl} target="_blank" rel="noopener noreferrer" download={fileLabel}>
+                        <Button variant="outline" size="sm" className="inline-flex items-center gap-1">
+                          <Download className="h-4 w-4" />
+                          {fileLabel}
+                        </Button>
+                      </a>
+                    )
+                  })()}
                 </div>
               </div>
               

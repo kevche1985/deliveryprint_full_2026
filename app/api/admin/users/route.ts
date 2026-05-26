@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase-server'
+import { requireRole } from '@/lib/rbac'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
   try {
+    const auth = await requireRole(request as any, ["admin", "operator"])
+    if (!auth.ok) return NextResponse.json({ error: 'Unauthorized' }, { status: auth.status })
     const supabase = createClient()
     
     // Get all users from auth.users (requires service role key)
@@ -56,20 +59,24 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireRole(request as any, ["admin"])
+    if (!auth.ok) return NextResponse.json({ error: 'Unauthorized' }, { status: auth.status })
     const supabase = createClient()
     const body = await request.json()
     
-    console.log('Creating user with data:', { 
-      email: body.email, 
-      first_name: body.first_name, 
-      last_name: body.last_name, 
-      role: body.role 
-    })
+    // Basic input validation
+    if (!body?.email || typeof body.email !== 'string') {
+      return NextResponse.json({ error: 'Invalid email' }, { status: 400 })
+    }
+    
+    if (!body.password || body.password.length < 8) {
+      return NextResponse.json({ error: 'Password must be at least 8 characters' }, { status: 400 })
+    }
     
     // Create user in auth.users
     const { data: authUser, error: authError } = await supabase.auth.admin.createUser({
       email: body.email,
-      password: body.password || 'TempPassword123!',
+      password: body.password,
       email_confirm: true,
       user_metadata: {
         first_name: body.first_name,
@@ -87,19 +94,10 @@ export async function POST(request: NextRequest) {
       }, { status: 500 })
     }
     
-    console.log('Auth user created successfully:', authUser.user.id)
+    // Avoid logging sensitive identifiers in production
     
     // Create service role client for profile creation (bypasses RLS)
-    const supabaseService = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false
-        }
-      }
-    )
+    const supabaseService = createClient()
     
     // Create user profile using service role
     const { data: profile, error: profileError } = await supabaseService
@@ -208,11 +206,26 @@ export async function DELETE(request: NextRequest) {
   try {
     const supabase = createClient()
     const { searchParams } = new URL(request.url)
-    const id = searchParams.get('id')
+    let id = searchParams.get('id')
+    const email = searchParams.get('email')
     const hard = searchParams.get('hard') === 'true'
     
+    // Allow deletion by email if id not provided
+    if (!id && email) {
+      const { data: users, error: listError } = await supabase.auth.admin.listUsers()
+      if (listError) {
+        console.error('Error listing users:', listError)
+        return NextResponse.json({ error: 'Failed to resolve user by email' }, { status: 500 })
+      }
+      const match = users.users.find(u => u.email?.toLowerCase() === email.toLowerCase())
+      if (!match) {
+        return NextResponse.json({ error: 'User not found for provided email' }, { status: 404 })
+      }
+      id = match.id
+    }
+    
     if (!id) {
-      return NextResponse.json({ error: 'User ID is required' }, { status: 400 })
+      return NextResponse.json({ error: 'User ID or email is required' }, { status: 400 })
     }
 
     // Check for dependencies before deletion

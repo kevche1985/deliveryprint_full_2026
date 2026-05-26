@@ -1,0 +1,16 @@
+{
+  "test_id": "TC021",
+  "test_name": "Orders Page Localization",
+  "status": "PASSED",
+  "timestamp": "2026-02-02",
+  "description": "Verifies that the Orders page content (auth required, headers, filters, tabs) correctly updates when switching languages between English and Spanish.",
+  "details": {
+    "checks": [
+      "Navigation to /orders",
+      "English localization verification (Title, Description)",
+      "Language switch to Spanish using dropdown",
+      "Spanish localization verification (Title, Description)"
+    ],
+    "environment": "localhost:3000"
+  }
+}

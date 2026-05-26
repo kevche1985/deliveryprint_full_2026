@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -14,6 +14,8 @@ import type { DesignOutputData } from "@/components/design-editor" // New import
 import { useCart } from "@/lib/cart-context"
 import QuoteRequestModal from "@/components/quote-request-modal"
 import { useLanguage } from "@/lib/language-context"
+import { useRouter } from "next/navigation"
+import FastTrackCheckoutModal from "@/components/fast-track-checkout-modal"
 
 const largeFormatProducts = [
   {
@@ -42,6 +44,7 @@ const largeFormatProducts = [
 
 export default function LargeFormatPage() {
   const { t } = useLanguage()
+  const router = useRouter()
   const [selectedProduct, setSelectedProduct] = useState(largeFormatProducts[0])
   const [customWidth, setCustomWidth] = useState(selectedProduct.baseSize.width)
   const [customHeight, setCustomHeight] = useState(selectedProduct.baseSize.height)
@@ -52,6 +55,9 @@ export default function LargeFormatPage() {
   const [showDesignEditor, setShowDesignEditor] = useState(false)
   const [customDesign, setCustomDesign] = useState<DesignOutputData | null>(null)
   const [showQuoteModal, setShowQuoteModal] = useState(false)
+  const [showFastCheckout, setShowFastCheckout] = useState(false)
+  const [uploadedFiles, setUploadedFiles] = useState<File[]>([])
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const { addItem } = useCart()
 
@@ -59,11 +65,18 @@ export default function LargeFormatPage() {
     const cartItem = {
       productId: `large-format-${selectedProduct.id}`,
       variantId: `${selectedProduct.id}-${customWidth}x${customHeight}`,
-      designId: customDesign?.id || undefined,
+      designId: (customDesign as any)?.design_id || (customDesign as any)?.id || undefined,
       quantity: quantity,
       price: calculatePrice(),
       name: `${t(`services.largeFormatPage.products.${selectedProduct.id}.name`)} - ${customWidth}x${customHeight} ${t(`services.largeFormatPage.products.${selectedProduct.id}.unit`)}`,
-      image: customDesign?.customizedProductImage || selectedProduct.image || "/placeholder.svg?height=200&width=300",
+      image:
+        (customDesign as any)?.customizedProductImage ||
+        (customDesign as any)?.thumbnail_jpeg ||
+        (customDesign as any)?.preview_url ||
+        (customDesign as any)?.download_url ||
+        (customDesign as any)?.storage_url ||
+        selectedProduct.image ||
+        "/placeholder.svg?height=200&width=300",
       customizations: {
         product: selectedProduct,
         width: customWidth,
@@ -73,7 +86,7 @@ export default function LargeFormatPage() {
         customDesign: customDesign
           ? {
               elements: customDesign.elements,
-              zoom: customDesign.zoom,
+              zoom: (customDesign as any)?.zoom ?? 1,
               customizedProductImage: customDesign.customizedProductImage,
               baseProductImage: customDesign.baseProductImage,
             }
@@ -88,6 +101,11 @@ export default function LargeFormatPage() {
 
     addItem(cartItem)
     alert(`${t("common.toast.addedToCartTitle")}: ${t(`services.largeFormatPage.products.${selectedProduct.id}.name`)}`)
+  }
+
+  const handleFastCheckout = async () => {
+    handleAddToCart()
+    router.push("/checkout")
   }
 
   const calculatePrice = () => {
@@ -168,9 +186,29 @@ export default function LargeFormatPage() {
                   <div className="flex items-start gap-4">
                     <div className="w-24 h-24 rounded-lg overflow-hidden bg-white border-2 border-red-200">
                       <img
-                        src={customDesign.customizedProductImage || "/placeholder.svg"}
+                        src={
+                          (customDesign as any)?.customizedProductImage ||
+                          (customDesign as any)?.thumbnail_jpeg ||
+                          (customDesign as any)?.preview_url ||
+                          (customDesign as any)?.download_url ||
+                          (customDesign as any)?.storage_url ||
+                          "/placeholder.svg"
+                        }
                         alt="Custom Design"
                         className="w-full h-full object-cover"
+                        onError={(e) => {
+                          const cd: any = customDesign
+                          if (!(e.currentTarget as any).dataset.fallbackApplied) {
+                            (e.currentTarget as any).dataset.fallbackApplied = "1"
+                            e.currentTarget.src =
+                              cd?.thumbnail_jpeg ||
+                              cd?.customizedProductImage ||
+                              cd?.preview_url ||
+                              cd?.download_url ||
+                              cd?.storage_url ||
+                              "/placeholder.svg"
+                          }
+                        }}
                       />
                     </div>
                     <div className="flex-1">
@@ -336,7 +374,35 @@ export default function LargeFormatPage() {
                     <FileImage className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                     <h3 className="text-lg font-medium mb-2">{t("services.largeFormatPage.dropFilesHere")}</h3>
                     <p className="text-gray-600 mb-4">{t("services.largeFormatPage.supportFormats")}</p>
-                    <Button variant="outline">{t("services.largeFormatPage.chooseFiles")}</Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      {t("services.largeFormatPage.chooseFiles")}
+                    </Button>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      multiple
+                      accept=".pdf,.png,.jpg,.jpeg,.ai,.psd"
+                      className="hidden"
+                      onChange={(e) => {
+                        const files = e.target.files ? Array.from(e.target.files) : []
+                        if (files.length > 0) {
+                          setUploadedFiles((prev) => [...prev, ...files])
+                        }
+                      }}
+                    />
+                    {uploadedFiles.length > 0 && (
+                      <div className="mt-4 text-left">
+                        <p className="text-sm font-medium mb-1">{t("services.largeFormatPage.uploadedFilesLabel")}</p>
+                        <ul className="text-sm text-gray-600 space-y-1">
+                          {uploadedFiles.map((f, i) => (
+                            <li key={i}>{f.name}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                     <Separator className="my-6" />
                     <p className="text-gray-600 mb-4">{t("services.largeFormatPage.orCreateCustomDesign")}</p>
                     <Button
@@ -442,6 +508,10 @@ export default function LargeFormatPage() {
                   </div>
                 </div>
 
+                <Button onClick={() => setShowFastCheckout(true)} className="w-full bg-gray-900 hover:bg-gray-800" size="lg">
+                  {t("common.checkout")}
+                </Button>
+
                 <Button onClick={handleAddToCart} className="w-full bg-red-600 hover:bg-red-700" size="lg">
                   <ShoppingCart className="mr-2 h-5 w-5" />
                   {t("common.addToCart")}
@@ -498,7 +568,7 @@ export default function LargeFormatPage() {
             customDesign
               ? {
                   elements: customDesign.elements,
-                  zoom: customDesign.zoom,
+                  zoom: (customDesign as any)?.zoom ?? 1,
                   productImage: customDesign.baseProductImage,
                 }
               : null
@@ -520,6 +590,24 @@ export default function LargeFormatPage() {
           }}
         />
       )}
+
+      <FastTrackCheckoutModal
+        isOpen={showFastCheckout}
+        onClose={() => setShowFastCheckout(false)}
+        title={t("common.checkout")}
+        description={t("common.fastCheckoutDescription")}
+        proceedLabel={t("common.checkout")}
+        cancelLabel={t("common.cancel")}
+        summary={[
+          { label: t("services.largeFormatPage.size"), value: `${customWidth} × ${customHeight}` },
+          { label: t("services.largeFormatPage.quantity"), value: String(quantity) },
+          { label: t("services.largeFormatPage.total"), value: `$${calculatePrice().toFixed(2)}` },
+        ]}
+        onProceed={async () => {
+          await handleFastCheckout()
+          setShowFastCheckout(false)
+        }}
+      />
     </div>
   )
 }

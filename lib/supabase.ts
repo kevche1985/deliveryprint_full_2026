@@ -115,14 +115,60 @@ export type Database = {
         Row: {
           id: string
           name: string
+          short_description: string | null
           description: string | null
+          technique: string | null
+          has_archive_guide: boolean | null
+          accepts_uploads: boolean | null
+          is_customizable: boolean | null
+          rating: number | null
+          review_count: number | null
+          wholesale_tiers: any | null
+          specifications: any | null
+          shipping_info: string | null
           price: number
           category: string | null
           image: string | null
           is_active: boolean
           is_featured: boolean
+          tenant_id: string | null
           created_at: string
           updated_at: string
+        }
+      }
+      product_media: {
+        Row: {
+          id: string
+          tenant_id: string | null
+          product_id: string
+          storage_path: string
+          type: string
+          alt_text: string | null
+          sort_order: number | null
+          created_at: string
+        }
+      }
+      product_variant_groups: {
+        Row: {
+          id: string
+          tenant_id: string | null
+          product_id: string
+          name: string
+          display: string
+          sort_order: number | null
+          created_at: string
+        }
+      }
+      product_variant_options: {
+        Row: {
+          id: string
+          tenant_id: string | null
+          group_id: string
+          label: string
+          price_modifier: number
+          is_available: boolean | null
+          sort_order: number | null
+          created_at: string
         }
       }
       orders: {

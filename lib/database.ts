@@ -511,6 +511,39 @@ export async function getOrderItemsWithImages(orderId: string) {
   }
 }
 
+export async function getOrderItemsWithUploads(orderId: string) {
+  try {
+    const { data, error } = await supabase
+      .from("order_items")
+      .select(
+        `
+        *,
+        products:product_id (
+          id,
+          name,
+          image,
+          category
+        ),
+        uploaded_file:uploaded_files!uploaded_file_id (
+          id,
+          file_url,
+          original_filename,
+          file_name,
+          status
+        )
+      `,
+      )
+      .eq("order_id", orderId)
+      .order("created_at", { ascending: true })
+
+    if (error) throw new Error(`Failed to fetch order items: ${error.message}`)
+    return data || []
+  } catch (error) {
+    console.error("Database connection error or other error in getOrderItemsWithUploads:", error)
+    throw error
+  }
+}
+
 // User Functions
 export async function getUserProfile(userId: string) {
   const { data, error } = await supabase.from("user_profiles").select("*").eq("id", userId).single()
@@ -584,10 +617,6 @@ export async function updateOrderPaymentStatus(orderId: string, status: string, 
   const updateData: any = {
     status,
     updated_at: new Date().toISOString(),
-  }
-
-  if (paymentData) {
-    updateData.payment_data = paymentData
   }
 
   const { data, error } = await supabase

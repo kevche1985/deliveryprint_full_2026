@@ -1,0 +1,134 @@
+{
+  "editor_version": "v1_mvp",
+  "product": "DeliveryPrint Design Editor",
+  "architecture": {
+    "type": "modular",
+    "scalable": true,
+    "extensible": true
+  },
+  "core_modules": {
+    "canvas": {
+      "features": [
+        "drag_and_drop",
+        "zoom_control",
+        "grid_guides",
+        "snap_to_grid",
+        "undo_redo",
+        "layer_management",
+        "object_lock",
+        "alignment_tools",
+        "multi_select"
+      ],
+      "constraints": {
+        "max_file_size_mb": 10,
+        "export_formats": ["PNG", "JPG"],
+        "dpi": 300
+      }
+    },
+    "upload": {
+      "features": [
+        "image_upload",
+        "drag_drop_upload",
+        "format_validation",
+        "auto_resize_to_canvas"
+      ],
+      "supported_formats": ["PNG", "JPG", "SVG"],
+      "max_size_mb": 10
+    },
+    "text_tools": {
+      "features": [
+        "add_text",
+        "font_selector",
+        "font_size_control",
+        "line_height_control",
+        "letter_spacing_control",
+        "text_color",
+        "text_alignment",
+        "text_outline",
+        "text_shadow",
+        "text_curve"
+      ]
+    },
+    "shapes": {
+      "features": [
+        "basic_shapes",
+        "border_control",
+        "fill_color",
+        "gradient_fill",
+        "opacity_control"
+      ]
+    },
+    "image_editing": {
+      "basic": [
+        "crop",
+        "resize",
+        "rotate",
+        "flip_horizontal",
+        "flip_vertical",
+        "auto_adjust",
+        "exposure",
+        "brightness",
+        "contrast",
+        "saturation",
+        "sharpen"
+      ],
+      "advanced": [
+        "color_changer",
+        "background_removal",
+        "clone_tool",
+        "dodge",
+        "burn",
+        "blur",
+        "noise_reduction"
+      ]
+    },
+    "background_tools": {
+      "features": [
+        "solid_color_background",
+        "gradient_background",
+        "texture_library",
+        "background_image_upload"
+      ]
+    }
+  },
+  "ai_modules": {
+    "image_generation": true,
+    "logo_generation": true,
+    "font_generation": true,
+    "background_removal_ai": true,
+    "smart_resize_ai": true
+  },
+  "export_system": {
+    "formats": ["PNG", "JPG", "PDF"],
+    "print_ready": true,
+    "dpi_options": [72, 150, 300],
+    "transparent_background": true
+  },
+  "monetization_flags": {
+    "free_tier": [
+      "basic_editing",
+      "upload",
+      "text_tools",
+      "shapes"
+    ],
+    "pro_tier": [
+      "advanced_editing",
+      "ai_tools",
+      "background_removal",
+      "smart_resize",
+      "high_dpi_export"
+    ]
+  },
+  "future_phase_2": {
+    "features": [
+      "template_marketplace",
+      "design_history",
+      "brand_kit",
+      "saved_color_palettes",
+      "collaboration_mode",
+      "cloud_auto_save",
+      "version_control",
+      "mockup_preview_generator"
+    ]
+  }
+}

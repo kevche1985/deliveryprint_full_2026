@@ -116,6 +116,7 @@ export async function POST(request: NextRequest) {
 
     // Upload only the image to Supabase Storage (no design data file)
     let imageUrl = null
+    let thumbUrl = null
 
     if (requestData.file_data?.canvas_data) {
       try {
@@ -128,7 +129,9 @@ export async function POST(request: NextRequest) {
         console.log(`📏 Image buffer size: ${Math.round((imageBuffer.length / 1024 / 1024) * 100) / 100}MB`)
 
         // Use the custom design name for the file path instead of the ID
-        const imageFileName = `designs/${user.id}/${requestData.name}_${Date.now()}.png`
+        const timestamp = Date.now()
+        const basePath = `designs/${user.id}/${requestData.name}_${timestamp}`
+        const imageFileName = `${basePath}.png`
 
         const { data: imageUploadData, error: imageUploadError } = await supabaseService.storage
           .from("digital-products")
@@ -153,6 +156,26 @@ export async function POST(request: NextRequest) {
         imageUrl = imageUrlData.publicUrl
 
         console.log("✅ Image uploaded successfully:", imageUrl)
+        // Upload thumbnail if provided
+        if (requestData.file_data?.thumbnail_data) {
+          console.log("📁 Uploading thumbnail to Supabase Storage...")
+          const thumbBase64 = requestData.file_data.thumbnail_data.split(",")[1]
+          const thumbBuffer = Buffer.from(thumbBase64, "base64")
+          const thumbFileName = `${basePath}.jpg`
+          const { error: thumbUploadError } = await supabaseService.storage
+            .from("digital-products")
+            .upload(thumbFileName, thumbBuffer, {
+              contentType: "image/jpeg",
+              upsert: true,
+            })
+          if (thumbUploadError) {
+            console.warn("⚠️ Thumbnail upload failed, continuing without thumbnail:", thumbUploadError)
+          } else {
+            const { data: thumbUrlData } = supabaseService.storage.from("digital-products").getPublicUrl(thumbFileName)
+            thumbUrl = thumbUrlData.publicUrl
+            console.log("✅ Thumbnail uploaded:", thumbUrl)
+          }
+        }
       } catch (storageError) {
         console.error("❌ Storage error:", storageError)
         return NextResponse.json(
@@ -174,7 +197,7 @@ export async function POST(request: NextRequest) {
       description: requestData.description?.substring(0, 1000) || null,
       base_price: requestData.base_price || 0,
       status: "unpurchased",
-      preview_url: imageUrl,
+      preview_url: thumbUrl || imageUrl,
       download_url: imageUrl,
       // Store only essential metadata (no large data)
       generation_inputs: {
@@ -188,6 +211,7 @@ export async function POST(request: NextRequest) {
       generated_content: {
         formats: ["png", "pdf", "svg", "jpg"],
         image_url: imageUrl,
+        thumbnail_url: thumbUrl,
         storage_path: `designs/${user.id}/${requestData.name}`,
         file_extension: "png",
         has_image: true,
@@ -198,6 +222,7 @@ export async function POST(request: NextRequest) {
         image_stored: true,
         original_request_size: requestText.length,
         storage_url: imageUrl,
+        thumbnail_storage_url: thumbUrl,
         custom_design_id: requestData.id, // And here for reference
       },
     }

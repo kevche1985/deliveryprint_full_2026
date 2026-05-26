@@ -10,6 +10,7 @@ import { Search, Loader2 } from "lucide-react"
 import Link from "next/link"
 import { getProducts, getCategories, type Product, type Category } from "@/lib/database"
 import Image from "next/image"
+import { getImageUrl } from "@/lib/image-utils"
 import { useLanguage } from "@/lib/language-context"
 
 export default function ProductsPage() {
@@ -129,7 +130,7 @@ export default function ProductsPage() {
                      <CardHeader className="p-0">
                        <div className="aspect-square relative overflow-hidden rounded-t-lg">
                          <Image
-                           src={product.image || "/placeholder.svg?height=300&width=300&query=product"}
+                           src={getImageUrl(product.image || null) || "/placeholder.svg?height=300&width=300&query=product"}
                            alt={product.name}
                            fill
                            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 25vw"

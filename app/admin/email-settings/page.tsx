@@ -17,6 +17,7 @@ import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/lib/auth-context"
 import { Loader2, Mail, Send, CheckCircle, XCircle, Clock, AlertCircle, LogIn } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { supabase } from "@/lib/supabase"
 
 interface EmailSettings {
   provider: string
@@ -117,7 +118,7 @@ export default function EmailSettingsPage() {
       template_name: template.template_name,
       subject_template: template.subject_template,
       html_template: template.html_template,
-      text_template: template.text_template,
+      text_template: template.text_template || '',
       variables: template.variables,
       is_active: template.is_active
     })
@@ -224,9 +225,17 @@ export default function EmailSettingsPage() {
     try {
       setLoading(true)
       console.log("Loading email settings...")
-
+      
+      let token = ''
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        token = session?.access_token || ''
+      } catch (e) {
+        token = ''
+      }
       const response = await fetch("/api/admin/email-settings", {
         credentials: "include",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       })
 
       console.log("Email settings response status:", response.status)
@@ -254,8 +263,11 @@ export default function EmailSettingsPage() {
 
   const loadTemplates = async () => {
     try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
       const response = await fetch("/api/admin/email-settings/templates", {
         credentials: "include",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       })
 
       if (response.ok) {
@@ -270,8 +282,11 @@ export default function EmailSettingsPage() {
   const loadLogs = async () => {
     try {
       setLogsLoading(true)
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
       const response = await fetch("/api/admin/email-settings/logs", {
         credentials: "include",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       })
 
       if (response.ok) {
@@ -288,10 +303,13 @@ export default function EmailSettingsPage() {
   const handleSaveSettings = async () => {
     try {
       setSaving(true)
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
       const response = await fetch("/api/admin/email-settings", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         credentials: "include",
         body: JSON.stringify({ emailSettings: settings }),
@@ -321,10 +339,13 @@ export default function EmailSettingsPage() {
   const testConnection = async () => {
     try {
       setTesting(true)
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
       const response = await fetch("/api/admin/email-settings/test-connection", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         credentials: "include",
         body: JSON.stringify({ settings }),
@@ -363,10 +384,13 @@ export default function EmailSettingsPage() {
 
     try {
       setTesting(true)
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
       const response = await fetch("/api/admin/email-settings/test-send", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         credentials: "include",
         body: JSON.stringify({
@@ -680,7 +704,6 @@ export default function EmailSettingsPage() {
                 </Card>
                 </TabsContent>
 
-                // Add the Template Editor Dialog
                 <Dialog open={isTemplateDialogOpen} onOpenChange={setIsTemplateDialogOpen}>
                 <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>

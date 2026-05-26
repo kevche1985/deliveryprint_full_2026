@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+
+<html class="light" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "inverse-primary": "#ffb3ac",
+              "secondary-fixed-dim": "#5bdda8",
+              "surface-tint": "#ba1a20",
+              "outline": "#8f6f6c",
+              "secondary": "#006c4b",
+              "primary": "#af101a",
+              "surface-bright": "#f9f9fc",
+              "on-tertiary-fixed": "#001f2a",
+              "outline-variant": "#e4beba",
+              "inverse-on-surface": "#f0f0f3",
+              "on-secondary-fixed-variant": "#005138",
+              "on-primary-fixed-variant": "#930010",
+              "secondary-fixed": "#7afac3",
+              "on-surface-variant": "#5b403d",
+              "on-surface": "#1a1c1e",
+              "surface-variant": "#e2e2e5",
+              "primary-fixed-dim": "#ffb3ac",
+              "surface-dim": "#dadadc",
+              "on-secondary": "#ffffff",
+              "primary-fixed": "#ffdad6",
+              "surface-container-lowest": "#ffffff",
+              "primary-container": "#d32f2f",
+              "tertiary-fixed": "#bee9ff",
+              "on-secondary-fixed": "#002114",
+              "tertiary-fixed-dim": "#7bd1f8",
+              "on-secondary-container": "#007350",
+              "surface-container": "#eeeef0",
+              "surface-container-highest": "#e2e2e5",
+              "on-error": "#ffffff",
+              "surface": "#f9f9fc",
+              "on-tertiary-container": "#e9f7ff",
+              "surface-container-low": "#f3f3f6",
+              "inverse-surface": "#2f3133",
+              "error-container": "#ffdad6",
+              "on-primary": "#ffffff",
+              "on-primary-container": "#fff2f0",
+              "surface-container-high": "#e8e8ea",
+              "on-error-container": "#93000a",
+              "error": "#ba1a1a",
+              "on-tertiary": "#ffffff",
+              "on-background": "#1a1c1e",
+              "secondary-container": "#7afac3",
+              "tertiary-container": "#00799c",
+              "background": "#f9f9fc",
+              "on-primary-fixed": "#410003",
+              "on-tertiary-fixed-variant": "#004d65",
+              "tertiary": "#005f7b"
+            },
+            fontFamily: {
+              "headline": ["Manrope"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .editorial-shadow {
+            box-shadow: 0 20px 40px -20px rgba(26, 28, 30, 0.04);
+        }
+    </style>
+</head>
+<body class="bg-surface font-body text-on-surface">
+<!-- Header (TopNavBar) -->
+<header class="fixed top-0 w-full z-50 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl shadow-sm dark:shadow-none">
+<nav class="flex justify-between items-center w-full px-6 py-4 max-w-screen-2xl mx-auto">
+<div class="text-2xl font-black tracking-tighter text-red-700 dark:text-red-500 font-headline">Delivery Print</div>
+<div class="hidden md:flex items-center space-x-8">
+<a class="text-slate-600 dark:text-slate-400 hover:text-red-700 dark:hover:text-red-400 transition-colors font-inter text-base leading-relaxed" href="#">Productos</a>
+<a class="text-slate-600 dark:text-slate-400 hover:text-red-700 dark:hover:text-red-400 transition-colors font-inter text-base leading-relaxed" href="#">Servicios</a>
+<a class="text-slate-600 dark:text-slate-400 hover:text-red-700 dark:hover:text-red-400 transition-colors font-inter text-base leading-relaxed" href="#">Estudio IA</a>
+<a class="text-slate-600 dark:text-slate-400 hover:text-red-700 dark:hover:text-red-400 transition-colors font-inter text-base leading-relaxed" href="#">Administrador</a>
+</div>
+<div class="flex items-center space-x-4">
+<button class="p-2 hover:bg-slate-100/50 dark:hover:bg-slate-800/50 rounded-md transition-all scale-95 active:scale-90 duration-200">
+<span class="material-symbols-outlined" data-icon="shopping_cart">shopping_cart</span>
+</button>
+<button class="p-2 hover:bg-slate-100/50 dark:hover:bg-slate-800/50 rounded-md transition-all scale-95 active:scale-90 duration-200">
+<span class="material-symbols-outlined" data-icon="account_circle">account_circle</span>
+</button>
+</div>
+</nav>
+</header>
+<main class="pt-20">
+<!-- Hero Section -->
+<section class="relative h-[870px] flex items-center overflow-hidden bg-surface">
+<div class="absolute inset-0 z-0">
+<img class="w-full h-full object-cover opacity-90" data-alt="Close up of professional high quality offset printing machine" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA1YsNIwtCK4PDnfAmgceQ_YfS8aVDtj-GCoviY7NIKgpWEDrB0oMttDa-IHtdc3R5yB3lSjjSaWcBct7hiJxH_i-eZoi7jebtx7iYfPb0nj4Ss-jou-9tqIJf6UXvulZqsenNfXnZKa77-LxJB4fGGMCa7KNTX0V60qskshrHoLQC9_8m6i8dDiLrzmXAfW02o0dTuzOYeeFE7f6jYK7XnatAx-PpFeakwX-baWl_BkcRSW_GOCkzCq_CaGipaUYM70XkftdsYzx-S"/>
+<div class="absolute inset-0 bg-gradient-to-r from-surface via-surface/60 to-transparent"></div>
+</div>
+<div class="container mx-auto px-6 relative z-10">
+<div class="max-w-2xl">
+<span class="label-md uppercase tracking-[0.2em] text-primary font-bold mb-4 block">Editorial Precision</span>
+<h1 class="text-7xl font-headline font-extrabold tracking-tight text-on-surface mb-6 leading-[1.1]">
+                        Tu Visión, <br/><span class="text-primary">Impresa.</span>
+</h1>
+<p class="text-xl text-on-surface-variant leading-relaxed mb-10 max-w-lg">
+                        Elevamos el estándar de la impresión bajo demanda con tecnología de vanguardia y acabados de lujo para cada proyecto.
+                    </p>
+<div class="flex flex-wrap gap-4">
+<button class="px-8 py-4 bg-gradient-to-br from-primary to-primary-container text-on-primary font-bold rounded-lg shadow-lg hover:-translate-y-1 transition-transform">
+                            Explorar Productos
+                        </button>
+<button class="px-8 py-4 bg-transparent border border-outline-variant/20 text-primary font-bold rounded-lg hover:bg-surface-container-low transition-colors">
+                            Impresión Digital
+                        </button>
+</div>
+</div>
+</div>
+</section>
+<!-- Interactive Roadmap Section -->
+<section class="py-24 bg-surface-container-low">
+<div class="container mx-auto px-6">
+<div class="mb-16">
+<h2 class="text-4xl font-headline font-bold text-on-surface mb-4">El Camino a la Perfección</h2>
+<div class="w-20 h-1 bg-primary"></div>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-4 gap-8 relative">
+<!-- Step 1 -->
+<div class="group relative">
+<div class="absolute -top-10 left-0 text-9xl font-headline font-black text-on-surface opacity-[0.03] select-none">1</div>
+<div class="bg-surface-container-lowest p-8 rounded-xl editorial-shadow relative z-10 border border-outline-variant/5">
+<div class="w-14 h-14 bg-primary/10 rounded-lg flex items-center justify-center text-primary mb-6">
+<span class="material-symbols-outlined text-3xl" data-icon="inventory_2">inventory_2</span>
+</div>
+<h3 class="text-xl font-headline font-bold mb-3">Selecciona tu Producto</h3>
+<p class="text-on-surface-variant text-sm leading-relaxed">Explora nuestro catálogo curado de materiales y formatos premium.</p>
+</div>
+</div>
+<!-- Step 2 -->
+<div class="group relative">
+<div class="absolute -top-10 left-0 text-9xl font-headline font-black text-on-surface opacity-[0.03] select-none">2</div>
+<div class="bg-surface-container-lowest p-8 rounded-xl editorial-shadow relative z-10 border border-outline-variant/5">
+<div class="w-14 h-14 bg-primary/10 rounded-lg flex items-center justify-center text-primary mb-6">
+<span class="material-symbols-outlined text-3xl" data-icon="draw">draw</span>
+</div>
+<h3 class="text-xl font-headline font-bold mb-3">Personaliza tu Diseño</h3>
+<p class="text-on-surface-variant text-sm leading-relaxed">Sube tus archivos o utiliza nuestro estudio creativo con IA integrada.</p>
+</div>
+</div>
+<!-- Step 3 -->
+<div class="group relative">
+<div class="absolute -top-10 left-0 text-9xl font-headline font-black text-on-surface opacity-[0.03] select-none">3</div>
+<div class="bg-surface-container-lowest p-8 rounded-xl editorial-shadow relative z-10 border border-outline-variant/5">
+<div class="w-14 h-14 bg-primary/10 rounded-lg flex items-center justify-center text-primary mb-6">
+<span class="material-symbols-outlined text-3xl" data-icon="potted_plant">potted_plant</span>
+</div>
+<h3 class="text-xl font-headline font-bold mb-3">Solicita tu Servicio</h3>
+<p class="text-on-surface-variant text-sm leading-relaxed">Configura los detalles técnicos y confirma tu pedido con un click.</p>
+</div>
+</div>
+<!-- Step 4 -->
+<div class="group relative">
+<div class="absolute -top-10 left-0 text-9xl font-headline font-black text-on-surface opacity-[0.03] select-none">4</div>
+<div class="bg-surface-container-lowest p-8 rounded-xl editorial-shadow relative z-10 border border-outline-variant/5">
+<div class="w-14 h-14 bg-secondary/10 rounded-lg flex items-center justify-center text-secondary mb-6">
+<span class="material-symbols-outlined text-3xl" data-icon="local_shipping">local_shipping</span>
+</div>
+<h3 class="text-xl font-headline font-bold mb-3">Recibe tu Pedido</h3>
+<p class="text-on-surface-variant text-sm leading-relaxed">Logística de precisión que garantiza que tu pedido llegue impecable.</p>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Nuestros Servicios Section -->
+<section class="py-24 bg-surface">
+<div class="container mx-auto px-6">
+<div class="flex flex-col md:flex-row justify-between items-end mb-16 gap-6">
+<div class="max-w-xl">
+<h2 class="text-4xl font-headline font-bold text-on-surface mb-4">Servicios Especializados</h2>
+<p class="text-on-surface-variant leading-relaxed">Desde el concepto hasta el papel, ofrecemos una gama completa de soluciones de impresión para marcas que buscan destacar.</p>
+</div>
+<button class="text-primary font-bold flex items-center gap-2 group">
+                        Ver todos los servicios 
+                        <span class="material-symbols-outlined group-hover:translate-x-1 transition-transform" data-icon="arrow_forward">arrow_forward</span>
+</button>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-10">
+<!-- Service 1 -->
+<div class="group bg-surface-container-lowest rounded-xl overflow-hidden editorial-shadow border border-outline-variant/5 hover:-translate-y-2 transition-transform duration-300">
+<div class="h-64 overflow-hidden relative">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="Large format printing poster on a wall" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCaxl_SDDPbie9iyh8aHSMtTyWXNof_5s0NT86LkH8q9iVNRmjALpSqvrz0a64dfy22zaxXzKkJNJF5kSOqBs7jbgM7svGnTFErYDgiSH3LpD75TEj-i9wUg2kwCcuK1ZhHoFHlWHrR2lSvmnrXbr2lbVck_bEUDcLeSFNN6JxFlNge7quLAHGO2F1XnoR6_5H9Tt-9HmOmJzsh-Zy9LHohv1Qu22noG04AG5qhW3zEHGN1-rgAtYBbY6UnZhY2fxlxtsOcjvJIMD_d"/>
+</div>
+<div class="p-8">
+<div class="flex items-center gap-4 mb-4">
+<span class="material-symbols-outlined text-primary" data-icon="aspect_ratio">aspect_ratio</span>
+<h3 class="text-2xl font-headline font-bold">Gran Formato</h3>
+</div>
+<p class="text-on-surface-variant mb-6 leading-relaxed">Impresiones de impacto para vallas, eventos y señalética de alta visibilidad.</p>
+<a class="inline-block py-2 text-primary font-bold border-b-2 border-transparent hover:border-primary transition-all" href="#">Saber Más</a>
+</div>
+</div>
+<!-- Service 2 -->
+<div class="group bg-surface-container-lowest rounded-xl overflow-hidden editorial-shadow border border-outline-variant/5 hover:-translate-y-2 transition-transform duration-300">
+<div class="h-64 overflow-hidden relative">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="Digital printing press in action with vibrant colors" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA5O1T3j8bCmT6tNeckyvKPRyY7CiRqBuLsPtsXf2MEyh5aLwtcr71vDcmJvT_3Xm_PVF2cJmEicmydGrLF64RNVDj8ryhnTGCMBW9Rg9h3-5TN8jKKc6O6GecUQk6LdhZxo-BksnTyENKijDi8jSaM-ykggkjSipFb2mkJ1TKl2_CQvxmxMWmbNtcTwziuht2a3HTKfRv-vMvhPDfENN47Ao6rmWUTW8olQdKcel0cM637nWypAqbeGfuEglC29IF3IIouwzM3S1r8"/>
+</div>
+<div class="p-8">
+<div class="flex items-center gap-4 mb-4">
+<span class="material-symbols-outlined text-primary" data-icon="print">print</span>
+<h3 class="text-2xl font-headline font-bold">Impresión Digital</h3>
+</div>
+<p class="text-on-surface-variant mb-6 leading-relaxed">Calidad fotográfica y rapidez para folletos, libros y papelería corporativa.</p>
+<a class="inline-block py-2 text-primary font-bold border-b-2 border-transparent hover:border-primary transition-all" href="#">Saber Más</a>
+</div>
+</div>
+<!-- Service 3 -->
+<div class="group bg-surface-container-lowest rounded-xl overflow-hidden editorial-shadow border border-outline-variant/5 hover:-translate-y-2 transition-transform duration-300">
+<div class="h-64 overflow-hidden relative">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="Design studio desk with multiple monitors and sketches" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBxkLQkl9P_9tG3Ms5pudJJt2mjx-BaFOcx3Ja-qe7zq0TlQj2Nsrv9zbt0tmMhCN7qeSLQY51fMb5ValyvozVfHrKKA3DG89DZaxlUZpVR1ItMI658CMo7o8ynbb_npbF9U28GeXPAoqMzlWEI6rjt1w6u9n3-jmSBVhPBmbg97F6yuoi7ISOzqC23ZFDpdGUG3c74DlqnIJopXuXJjYeJCPcEXwaRM8beKELwBD5t54SleXrOCpxZcKMtgP7LbqvlgY_OVyPe2Vm6"/>
+</div>
+<div class="p-8">
+<div class="flex items-center gap-4 mb-4">
+<span class="material-symbols-outlined text-primary" data-icon="brush">brush</span>
+<h3 class="text-2xl font-headline font-bold">Estudio de Diseño</h3>
+</div>
+<p class="text-on-surface-variant mb-6 leading-relaxed">Expertos creativos listos para dar vida a tus conceptos más ambiciosos.</p>
+<a class="inline-block py-2 text-primary font-bold border-b-2 border-transparent hover:border-primary transition-all" href="#">Saber Más</a>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- How to make your first purchase section -->
+<section class="py-24 bg-surface-container-low overflow-hidden">
+<div class="container mx-auto px-6">
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-20 items-center">
+<div class="relative">
+<div class="absolute -top-10 -left-10 w-64 h-64 bg-primary/5 rounded-full blur-3xl"></div>
+<img class="rounded-2xl editorial-shadow relative z-10 w-full object-cover grayscale-[20%]" data-alt="Modern clean workspace with a person ordering on a laptop" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDwgggbiC_1RYsr77ttzz9UCk3Lx24hqRLkJCyS1yY0-4f5g9Dwb8yzKjD5cYsDyLcowrcIZ6nQee1PXvau9uGWeuJI2xlAbQeOF-T_dDhjq50MAxgBMOI3YzSbWo6vd_3Yy3AoS9GTsCaCJQUn64xybOamcyM2viTkZ_LfGMORi78zCcJmGinm1zbxxmnlf9ADhKPBPk79Dsug-q8-_VSLbwB2n6f7iCmBZrPWmkrBKV1YZYhk1icpK9x4J-98cMFvMxKpJN1UxAOJ"/>
+</div>
+<div>
+<span class="label-md uppercase tracking-[0.2em] text-secondary font-bold mb-4 block">Primeros Pasos</span>
+<h2 class="text-4xl font-headline font-bold text-on-surface mb-8">Cómo realizar tu primera compra</h2>
+<div class="space-y-10">
+<div class="flex gap-6">
+<div class="flex-shrink-0 w-10 h-10 rounded-full border-2 border-primary flex items-center justify-center text-primary font-bold">1</div>
+<div>
+<h4 class="text-xl font-headline font-bold mb-2">Crea tu cuenta</h4>
+<p class="text-on-surface-variant">Regístrate en segundos para acceder a precios exclusivos y guardar tus diseños.</p>
+</div>
+</div>
+<div class="flex gap-6">
+<div class="flex-shrink-0 w-10 h-10 rounded-full border-2 border-primary flex items-center justify-center text-primary font-bold">2</div>
+<div>
+<h4 class="text-xl font-headline font-bold mb-2">Sube y Configura</h4>
+<p class="text-on-surface-variant">Usa nuestra herramienta de pre-vuelo para asegurar que tu arte esté listo para prensa.</p>
+</div>
+</div>
+<div class="flex gap-6">
+<div class="flex-shrink-0 w-10 h-10 rounded-full border-2 border-primary flex items-center justify-center text-primary font-bold">3</div>
+<div>
+<h4 class="text-xl font-headline font-bold mb-2">Checkout Seguro</h4>
+<p class="text-on-surface-variant">Múltiples métodos de pago y seguimiento en tiempo real hasta tu puerta.</p>
+</div>
+</div>
+</div>
+<button class="mt-12 px-10 py-4 bg-primary text-on-primary font-bold rounded-lg hover:shadow-xl transition-all">
+                            Empezar ahora
+                        </button>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Footer -->
+<footer class="w-full border-t border-slate-200/20 dark:border-slate-800/20 bg-slate-50 dark:bg-slate-950">
+<div class="flex flex-col md:flex-row justify-between items-center px-8 py-12 w-full mt-20 max-w-screen-2xl mx-auto">
+<div class="mb-8 md:mb-0">
+<div class="font-manrope font-bold text-slate-900 dark:text-slate-100 text-xl mb-4">Delivery Print</div>
+<p class="font-inter text-sm text-slate-500 dark:text-slate-400 max-w-xs">© 2024 Delivery Print. Editorial Precision in Every Press.</p>
+</div>
+<div class="flex flex-wrap justify-center gap-8 md:gap-12">
+<a class="font-inter text-sm text-slate-500 dark:text-slate-400 hover:text-red-700 dark:hover:text-red-400 transition-colors opacity-80 hover:opacity-100" href="#">Privacidad</a>
+<a class="font-inter text-sm text-slate-500 dark:text-slate-400 hover:text-red-700 dark:hover:text-red-400 transition-colors opacity-80 hover:opacity-100" href="#">Términos</a>
+<a class="font-inter text-sm text-slate-500 dark:text-slate-400 hover:text-red-700 dark:hover:text-red-400 transition-colors opacity-80 hover:opacity-100" href="#">Contacto</a>
+<a class="font-inter text-sm text-slate-500 dark:text-slate-400 hover:text-red-700 dark:hover:text-red-400 transition-colors opacity-80 hover:opacity-100" href="#">Soporte</a>
+</div>
+<div class="mt-8 md:mt-0 flex gap-4">
+<span class="material-symbols-outlined text-slate-400 cursor-pointer hover:text-primary transition-colors" data-icon="language">language</span>
+<span class="material-symbols-outlined text-slate-400 cursor-pointer hover:text-primary transition-colors" data-icon="share">share</span>
+</div>
+</div>
+</footer>
+</body></html>

@@ -3,14 +3,28 @@ import { OrderItem } from '@/lib/database'
 
 export function getImageUrl(path: string | null | undefined): string {
   if (!path) return '/placeholder.svg'
-  
-  // If it's already a full URL, return as is
+
+  // If it's already a full URL (any host), use as is
   if (path.startsWith('http://') || path.startsWith('https://')) {
+    // Normalize double slashes in Supabase public object URLs
+    try {
+      const u = new URL(path)
+      const marker = '/storage/v1/object/public/'
+      const idx = u.pathname.indexOf(marker)
+      if (idx >= 0) {
+        const suffix = u.pathname.slice(idx + marker.length)
+        const normalized = suffix.replace(/^\/+/, '').replace(/\/{2,}/g, '/')
+        return `${u.origin}${marker}${normalized}`
+      }
+    } catch {
+      // fall through
+    }
     return path
   }
-  
-  // If it's a relative path, prepend the base URL
-  return `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/${path}`
+
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+  const clean = (path.startsWith('/') ? path.slice(1) : path).replace(/\/{2,}/g, '/')
+  return `${base}/storage/v1/object/public/${clean}`
 }
 
 export function validateImageFile(file: File): { isValid: boolean; error?: string } {

@@ -7,23 +7,27 @@ import { Button } from "@/components/ui/button"
 import { Loader2, CheckCircle, XCircle, CreditCard } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useLanguage } from "@/lib/language-context"
+import { useCart } from "@/lib/cart-context"
+import { useDigitalCart } from "@/lib/digital-cart-context"
 
 export default function Payment3DSPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { toast } = useToast()
   const { t } = useLanguage()
+  const { clearCart } = useCart()
+  const { clearCart: clearDigitalCart } = useDigitalCart()
   const [loading, setLoading] = useState(true)
   const [verifying, setVerifying] = useState(false)
   const [status, setStatus] = useState<"pending" | "success" | "failed" | "error">("pending")
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   const transactionId = searchParams.get("id")
-  const orderId = searchParams.get("orderId")
+  const reference = searchParams.get("reference")
   const result = searchParams.get("result") // success, failed, cancelled
 
   useEffect(() => {
-    if (!transactionId || !orderId) {
+    if (!transactionId || !reference) {
       setStatus("error")
       setErrorMessage("Missing transaction information")
       setLoading(false)
@@ -33,10 +37,15 @@ export default function Payment3DSPage() {
     // Handle the 3DS result
     const handle3DSResult = async () => {
       try {
-        if (result === "success") {
+        if (result === "failed") {
+          setStatus("failed")
+          setErrorMessage("Payment was declined")
+        } else if (result === "cancelled") {
+          setStatus("failed")
+          setErrorMessage("Payment was cancelled")
+        } else {
           setVerifying(true)
 
-          // Verify the transaction with Wompi API
           const verifyResponse = await fetch("/api/payments/wompi/verify", {
             method: "POST",
             headers: {
@@ -44,7 +53,6 @@ export default function Payment3DSPage() {
             },
             body: JSON.stringify({
               transactionId,
-              orderId,
             }),
           })
 
@@ -55,14 +63,17 @@ export default function Payment3DSPage() {
 
             if (transactionStatus === "EXITOSO" || transactionStatus === "APROBADO") {
               setStatus("success")
+              clearCart()
+              clearDigitalCart()
               toast({
                 title: t("payment.success.title"),
                 description: t("payment.success.description"),
               })
 
-              // Redirect to order confirmation after a short delay
               setTimeout(() => {
-                router.push(`/orders/${orderId}/confirmation?status=success&transaction=${transactionId}`)
+                router.push(
+                  `/payment-complete?reference=${encodeURIComponent(reference)}&status=success&type=wompi&transaction=${encodeURIComponent(transactionId)}`,
+                )
               }, 2000)
             } else if (transactionStatus === "RECHAZADO" || transactionStatus === "FALLIDO") {
               setStatus("failed")
@@ -75,15 +86,6 @@ export default function Payment3DSPage() {
             setStatus("failed")
             setErrorMessage(verifyData.error || "Verification failed")
           }
-        } else if (result === "failed") {
-          setStatus("failed")
-          setErrorMessage("Payment was declined")
-        } else if (result === "cancelled") {
-          setStatus("failed")
-          setErrorMessage("Payment was cancelled")
-        } else {
-          setStatus("error")
-          setErrorMessage("Unknown payment result")
         }
       } catch (error) {
         console.error("3DS verification error:", error)
@@ -96,7 +98,7 @@ export default function Payment3DSPage() {
     }
 
     handle3DSResult()
-  }, [transactionId, orderId, result, router, toast, t])
+  }, [transactionId, reference, result, router, toast, t])
 
   const getErrorMessage = (errorCode?: string) => {
     switch (errorCode) {
@@ -184,7 +186,11 @@ export default function Payment3DSPage() {
               {status === "success" ? (
                 <>
                   <Button
-                    onClick={() => router.push(`/orders/${orderId}/confirmation`)}
+                    onClick={() =>
+                      router.push(
+                        `/payment-complete?reference=${encodeURIComponent(reference || "")}&status=success&type=wompi&transaction=${encodeURIComponent(transactionId || "")}`,
+                      )
+                    }
                     className="w-full bg-[#8B0000] hover:bg-[#6B0000]"
                   >
                     {t("payment.3ds.viewOrder")}

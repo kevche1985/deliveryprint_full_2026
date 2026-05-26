@@ -13,7 +13,7 @@ import { useLanguage } from "@/lib/language-context"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Download, Package, Truck, CheckCircle, Clock, CreditCard, Printer, ArrowLeft, Edit } from "lucide-react"
 import OrderItemsList from "@/components/order-items-list"
-import { getOrderItemsWithImages, OrderItem } from "@/lib/database"
+import { getOrderItemsWithUploads, OrderItem } from "@/lib/database"
 
 interface Order {
   id: string
@@ -137,7 +137,7 @@ export default function OrderDetailsPage() {
       // Enhance order items with product images
       console.log('Original order items:', fetchedOrder.order_items?.length || 0)
       try {
-        const orderItemsWithImages = await getOrderItemsWithImages(orderId as string)
+        const orderItemsWithImages = await getOrderItemsWithUploads(orderId as string)
         console.log('Enhanced order items:', orderItemsWithImages?.length || 0)
         console.log('Enhanced order items data:', orderItemsWithImages)
         

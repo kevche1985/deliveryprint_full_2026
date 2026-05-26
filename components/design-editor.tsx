@@ -33,6 +33,7 @@ import html2canvas from "html2canvas"
 import { toast } from "@/components/ui/use-toast"
 import { useCart } from "@/lib/cart-context"
 import { useAuth } from "@/lib/auth-context"
+import { canUseFeature, getCanvasConstraints, isAiEnabled } from "@/lib/editor/feature-flags"
 import { createClient } from "@supabase/supabase-js"
 import { useLanguage } from "@/lib/language-context"
 
@@ -143,6 +144,21 @@ const DesignEditor: React.FC<DesignEditorProps> = ({
   const [historyIndex, setHistoryIndex] = useState(-1)
   const [isSaving, setIsSaving] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [brandColors, setBrandColors] = useState<string[]>(() => {
+    try {
+      const v = localStorage.getItem("brandKitColors")
+      return v ? JSON.parse(v) : ["#D00000", "#1A1A1A", "#FFFFFF"]
+    } catch {
+      return ["#D00000", "#1A1A1A", "#FFFFFF"]
+    }
+  })
+  const [brandFont, setBrandFont] = useState<string>(() => {
+    try {
+      return localStorage.getItem("brandKitFont") || "Arial, sans-serif"
+    } catch {
+      return "Arial, sans-serif"
+    }
+  })
 
   const canvasContainerRef = useRef<HTMLDivElement>(null)
   const designViewportRef = useRef<HTMLDivElement>(null)
@@ -163,8 +179,12 @@ const DesignEditor: React.FC<DesignEditorProps> = ({
   const [cropAspect, setCropAspect] = useState<number | undefined>(undefined)
 
   const { addItem } = useCart()
-  const { user } = useAuth()
+  const { user, role } = useAuth()
   const { t } = useLanguage()
+  const proEditingEnabled = canUseFeature("advanced_editing", role)
+  const canvasConstraints = getCanvasConstraints()
+  const bgRemovalEnabled = canUseFeature("background_removal", role) && isAiEnabled("background_removal_ai")
+  const smartResizeEnabled = canUseFeature("smart_resize", role) && isAiEnabled("smart_resize_ai")
 
   // Add to history for undo/redo
   const addToHistory = useCallback(
@@ -442,6 +462,77 @@ const DesignEditor: React.FC<DesignEditorProps> = ({
     }
   }
 
+  const applyBrandColorToSelected = (color: string) => {
+    if (selectedElementId === null) return
+    const el = elements.find((e) => e.id === selectedElementId)
+    if (!el) return
+    if (el.type === "text") {
+      commitSelectedElementUpdate({ color })
+    } else if (el.type === "shape") {
+      commitSelectedElementUpdate({ fill: color })
+    }
+  }
+
+  const applyBrandFontToSelected = () => {
+    if (selectedElementId === null) return
+    const el = elements.find((e) => e.id === selectedElementId)
+    if (!el) return
+    if (el.type === "text") {
+      commitSelectedElementUpdate({ fontFamily: brandFont })
+    }
+  }
+
+  const smartResizeSelected = () => {
+    if (selectedElementId === null) return
+    const el = elements.find((e) => e.id === selectedElementId)
+    if (!el || el.type !== "image") return
+    const ar = el.aspectRatio || ((el.width || 1) / (el.height || 1))
+    const maxW = printArea.width
+    const maxH = printArea.height
+    let w = maxW
+    let h = w / ar
+    if (h > maxH) {
+      h = maxH
+      w = h * ar
+    }
+    const x = printArea.x + (printArea.width - w) / 2
+    const y = printArea.y + (printArea.height - h) / 2
+    commitSelectedElementUpdate({ width: w, height: h, x, y })
+  }
+
+  const removeBackgroundSelected = async () => {
+    if (selectedElementId === null) return
+    const el = elements.find((e) => e.id === selectedElementId)
+    if (!el || el.type !== "image" || !el.src) return
+    const img = new Image()
+    img.crossOrigin = "anonymous"
+    img.onload = () => {
+      const c = document.createElement("canvas")
+      c.width = img.naturalWidth
+      c.height = img.naturalHeight
+      const ctx = c.getContext("2d")
+      if (!ctx) return
+      ctx.drawImage(img, 0, 0)
+      const imageData = ctx.getImageData(0, 0, c.width, c.height)
+      const data = imageData.data
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i]
+        const g = data[i + 1]
+        const b = data[i + 2]
+        const max = Math.max(r, g, b)
+        const min = Math.min(r, g, b)
+        const bright = (r + g + b) / 3
+        if (bright > 240 || (max - min) < 8) {
+          data[i + 3] = 0
+        }
+      }
+      ctx.putImageData(imageData, 0, 0)
+      const out = c.toDataURL("image/png")
+      commitSelectedElementUpdate({ src: out })
+    }
+    img.src = el.src
+  }
+
   const handleSave = async () => {
     // Ensure we always reset loading state
     let isLoadingStateSet = false
@@ -515,8 +606,22 @@ const DesignEditor: React.FC<DesignEditorProps> = ({
       // Revert transform-origin
       designViewportRef.current.style.transformOrigin = originalTransformOrigin
 
-      // Get image with reasonable quality
-      const capturedImageBase64 = canvas.toDataURL("image/png", 0.9) // Slightly reduced quality for speed
+      const capturedImageBase64 = canvas.toDataURL("image/png", 0.9)
+      
+      // Create a white background for the thumbnail to prevent black background issue
+      const thumbCanvas = document.createElement('canvas')
+      thumbCanvas.width = canvas.width
+      thumbCanvas.height = canvas.height
+      const thumbCtx = thumbCanvas.getContext('2d')!
+      
+      // Fill with white background first
+      thumbCtx.fillStyle = '#ffffff'
+      thumbCtx.fillRect(0, 0, thumbCanvas.width, thumbCanvas.height)
+      
+      // Draw the original canvas on top
+      thumbCtx.drawImage(canvas, 0, 0)
+      
+      const capturedThumbBase64 = thumbCanvas.toDataURL("image/jpeg", 0.6)
       const sizeInMB = capturedImageBase64.length / (1024 * 1024)
       console.log(`📏 Image size: ${sizeInMB.toFixed(2)}MB`)
 
@@ -533,6 +638,7 @@ const DesignEditor: React.FC<DesignEditorProps> = ({
         baseProductImage: productImage,
         timestamp: Date.now(),
         customizedProductImage: capturedImageBase64,
+        thumbnail_jpeg: capturedThumbBase64,
       }
 
       // Generate a unique ID for the design
@@ -548,6 +654,7 @@ const DesignEditor: React.FC<DesignEditorProps> = ({
           design_data: designData,
           formats: ["png", "pdf", "svg", "jpg"],
           canvas_data: capturedImageBase64,
+            thumbnail_data: capturedThumbBase64,
         },
         generation_inputs: {
           base_product: productName,
@@ -700,6 +807,7 @@ const DesignEditor: React.FC<DesignEditorProps> = ({
           // Ensure we have the image for thumbnail display
           preview_url: storedImageUrl,
           download_url: storedImageUrl,
+          thumbnail_jpeg: capturedThumbBase64,
           // Add metadata for debugging
           saved_at: new Date().toISOString(),
           design_id: digitalProduct.product?.id || digitalProduct.id
@@ -847,6 +955,9 @@ const DesignEditor: React.FC<DesignEditorProps> = ({
           {t("designEditor.title")} {productName ? `${t("designEditor.forProduct")} ${productName}` : ""}
         </h2>
         <div className="flex items-center gap-2">
+          <div className={`text-xs px-2 py-1 rounded ${proEditingEnabled ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}>
+            {proEditingEnabled ? "Pro features enabled" : "Pro features locked"}
+          </div>
           <Button variant="ghost" size="sm" onClick={undo} disabled={historyIndex <= 0} title={t("designEditor.undo")}>
             <Undo className="w-4 h-4" />
           </Button>
@@ -898,7 +1009,7 @@ const DesignEditor: React.FC<DesignEditorProps> = ({
         {/* Sidebar */}
         <div className="w-80 border-r border-gray-200 bg-gray-50 flex flex-col">
           <Tabs defaultValue="upload" className="flex flex-col flex-grow">
-            <TabsList className="grid w-full grid-cols-3 shrink-0">
+            <TabsList className="grid w-full grid-cols-4 shrink-0">
               <TabsTrigger value="upload">
                 <Upload className="w-4 h-4 mr-1 inline-block" />
                 Upload
@@ -910,6 +1021,10 @@ const DesignEditor: React.FC<DesignEditorProps> = ({
               <TabsTrigger value="shapes">
                 <Square className="w-4 h-4 mr-1 inline-block" />
                 Shapes
+              </TabsTrigger>
+              <TabsTrigger value="brand">
+                <Circle className="w-4 h-4 mr-1 inline-block" />
+                Brand
               </TabsTrigger>
             </TabsList>
 
@@ -923,7 +1038,7 @@ const DesignEditor: React.FC<DesignEditorProps> = ({
                 >
                   <Upload className="w-8 h-8 mx-auto mb-2 text-gray-400" />
                   <p className="text-xs text-gray-600 mb-1">{t("designEditor.upload.dragDrop")}</p>
-                  <p className="text-xs text-gray-500">{t("designEditor.upload.maxSize")}</p>
+                  <p className="text-xs text-gray-500">Max {canvasConstraints.max_file_size_mb}MB • Formats: {canvasConstraints.export_formats.join(", ")}</p>
                 </div>
                 <input
                   ref={fileInputRef}
@@ -997,6 +1112,45 @@ const DesignEditor: React.FC<DesignEditorProps> = ({
                   <span className="text-xs capitalize">{t(`designEditor.shapes.${shape}`)}</span>
                     </Button>
                   ))}
+                </div>
+              </TabsContent>
+              <TabsContent value="brand" className="space-y-4">
+                <div>
+                  <Label className="text-xs">Primary Colors</Label>
+                  <div className="grid grid-cols-5 gap-2 mt-2">
+                    {brandColors.map((c, idx) => (
+                      <div key={idx} className="flex flex-col items-center gap-1">
+                        <Input
+                          type="color"
+                          value={c}
+                          onChange={(e) => {
+                            const next = [...brandColors]
+                            next[idx] = e.target.value
+                            setBrandColors(next)
+                            try { localStorage.setItem("brandKitColors", JSON.stringify(next)) } catch {}
+                          }}
+                          className="w-full h-9 p-1"
+                        />
+                        <Button variant="outline" size="sm" onClick={() => applyBrandColorToSelected(c)}>Apply</Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs">Brand Font</Label>
+                    <Input
+                      value={brandFont}
+                      onChange={(e) => {
+                        setBrandFont(e.target.value)
+                        try { localStorage.setItem("brandKitFont", e.target.value) } catch {}
+                      }}
+                      className="mt-1 h-8 text-xs"
+                    />
+                  </div>
+                  <div className="flex items-end">
+                    <Button variant="outline" size="sm" onClick={applyBrandFontToSelected}>Apply to selected text</Button>
+                  </div>
                 </div>
               </TabsContent>
             </div>
@@ -1304,6 +1458,34 @@ const DesignEditor: React.FC<DesignEditorProps> = ({
                     <Crop className="w-4 h-4" /> 
                     <span>{t("designEditor.actions.cropImage")}</span>
                   </Button>
+                )}
+                {selected.type === "image" && (
+                  <div className="grid grid-cols-2 gap-2 mt-2">
+                    <Button
+                      variant={bgRemovalEnabled ? "outline" : "secondary"}
+                      size="sm"
+                      disabled={!bgRemovalEnabled}
+                      onClick={removeBackgroundSelected}
+                      className="flex items-center justify-center gap-2 py-2"
+                    >
+                      <span className="text-xs whitespace-nowrap">Background Removal AI</span>
+                    </Button>
+                    <Button
+                      variant={smartResizeEnabled ? "outline" : "secondary"}
+                      size="sm"
+                      disabled={!smartResizeEnabled}
+                      onClick={smartResizeSelected}
+                      className="flex items-center justify-center gap-2 py-2"
+                    >
+                      <span>Smart Resize</span>
+                    </Button>
+                  </div>
+                )}
+                
+                {!proEditingEnabled && (
+                  <div className="mt-2 text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                    Upgrade to Pro to unlock advanced editing (background removal, smart resize)
+                  </div>
                 )}
                 
                 <Button 

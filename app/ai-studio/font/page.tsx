@@ -14,46 +14,19 @@ import { useToast } from "@/hooks/use-toast"
 import { useDigitalCart } from "@/lib/digital-cart-context"
 import DigitalProductChoiceModal from "@/components/digital-product-choice-modal"
 import { supabase } from "@/lib/supabase"
-
-const fontCategories = [
-  "Serif",
-  "Sans-serif",
-  "Script",
-  "Display",
-  "Handwritten",
-  "Monospace",
-  "Decorative",
-  "Blackletter",
-  "Calligraphy",
-  "Graffiti",
-]
-
-const fontStyles = [
-  "Elegant",
-  "Bold",
-  "Playful",
-  "Vintage",
-  "Modern",
-  "Minimalist",
-  "Futuristic",
-  "Retro",
-  "Geometric",
-  "Organic",
-]
-
-const fontWeights = [
-  { name: "Light", value: "300" },
-  { name: "Regular", value: "400" },
-  { name: "Medium", value: "500" },
-  { name: "Bold", value: "700" },
-]
+import { FONT_PROMPT_TEMPLATE, buildPromptFromTemplate } from "@/lib/ai-prompts"
+import { useLanguage } from "@/lib/language-context"
 
 export default function FontGeneratorPage() {
   const { user } = useAuth()
   const { toast } = useToast()
   const { addItem } = useDigitalCart()
+  const { t, tRaw } = useLanguage()
+  const fontCategories = (tRaw("aiStudio.font.categories") as string[]) || []
+  const fontStyles = (tRaw("aiStudio.font.styles") as string[]) || []
+  const fontWeights = (tRaw("aiStudio.font.weights") as Array<{ name: string; value: string }>) || []
   const [prompt, setPrompt] = useState("")
-  const [sampleText, setSampleText] = useState("The quick brown fox jumps over the lazy dog")
+  const [sampleText, setSampleText] = useState(t("aiStudio.font.form.sampleDefault"))
   const [selectedCategory, setSelectedCategory] = useState("")
   const [selectedStyle, setSelectedStyle] = useState("")
   const [selectedWeight, setSelectedWeight] = useState("")
@@ -86,20 +59,17 @@ export default function FontGeneratorPage() {
     setGeneratedFont(null)
     setDesignId(null)
 
-    // Build the complete prompt
-    let fullPrompt = prompt
-    if (selectedCategory) {
-      fullPrompt += ` Category: ${selectedCategory}.`
+    const backendPrompt = {
+      ...FONT_PROMPT_TEMPLATE,
+      input_parameters: {
+        font_description: prompt,
+        font_category: selectedCategory,
+        style: selectedStyle,
+        weight: selectedWeight,
+        sample_text: sampleText,
+      },
     }
-    if (selectedStyle) {
-      fullPrompt += ` Style: ${selectedStyle}.`
-    }
-    if (selectedWeight) {
-      fullPrompt += ` Weight: ${selectedWeight}.`
-    }
-    if (sampleText) {
-      fullPrompt += ` Sample text: "${sampleText}".`
-    }
+    const fullPrompt = buildPromptFromTemplate(backendPrompt, backendPrompt.input_parameters)
 
     try {
       const response = await fetch("/api/ai/generate", {
@@ -109,6 +79,7 @@ export default function FontGeneratorPage() {
         },
         body: JSON.stringify({
           prompt: fullPrompt,
+          backendPrompt,
           type: "font",
           userId: user.id,
         }),
@@ -278,37 +249,37 @@ export default function FontGeneratorPage() {
     <div className="min-h-screen bg-gray-50 py-12">
       <div className="container mx-auto px-4 max-w-6xl">
         <div className="mb-8 animate-fade-in">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">AI Font Generator</h1>
-          <p className="text-gray-600">Create unique typography for your brand and designs</p>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">{t("aiStudio.font.title")}</h1>
+          <p className="text-gray-600">{t("aiStudio.font.subtitle")}</p>
         </div>
 
         <div className="grid lg:grid-cols-2 gap-8">
           <div className="animate-slide-in-left">
             <Card>
               <CardHeader>
-                <CardTitle>Font Details</CardTitle>
-                <CardDescription>Describe your vision and preferences</CardDescription>
+                <CardTitle>{t("aiStudio.font.form.title")}</CardTitle>
+                <CardDescription>{t("aiStudio.font.form.description")}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="space-y-2">
-                  <Label htmlFor="prompt">Font Description</Label>
+                  <Label htmlFor="prompt">{t("aiStudio.font.form.promptLabel")}</Label>
                   <Textarea
                     id="prompt"
-                    placeholder="Describe your ideal font... (e.g., 'A sleek, modern font for a tech startup')"
+                    placeholder={t("aiStudio.font.form.promptPlaceholder")}
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
                     rows={4}
                     className="resize-none"
                     disabled={isGenerating}
                   />
-                  <p className="text-sm text-gray-500">{prompt.length}/500 characters</p>
+                  <p className="text-sm text-gray-500">{prompt.length}/500 {t("aiStudio.font.form.characters")}</p>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="sampleText">Sample Text</Label>
+                  <Label htmlFor="sampleText">{t("aiStudio.font.form.sampleTextLabel")}</Label>
                   <Input
                     id="sampleText"
-                    placeholder="Enter text to display in your font"
+                    placeholder={t("aiStudio.font.form.samplePlaceholder")}
                     value={sampleText}
                     onChange={(e) => setSampleText(e.target.value)}
                     disabled={isGenerating}
@@ -316,7 +287,7 @@ export default function FontGeneratorPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Font Category</Label>
+                  <Label>{t("aiStudio.font.form.categoryLabel")}</Label>
                   <div className="flex flex-wrap gap-2">
                     {fontCategories.map((category) => (
                       <Badge
@@ -336,7 +307,7 @@ export default function FontGeneratorPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Style</Label>
+                  <Label>{t("aiStudio.font.form.styleLabel")}</Label>
                   <div className="flex flex-wrap gap-2">
                     {fontStyles.map((style) => (
                       <Badge
@@ -356,7 +327,7 @@ export default function FontGeneratorPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Weight</Label>
+                  <Label>{t("aiStudio.font.form.weightLabel")}</Label>
                   <div className="grid grid-cols-4 gap-3">
                     {fontWeights.map((weight) => (
                       <div
@@ -379,8 +350,7 @@ export default function FontGeneratorPage() {
                 <Alert>
                   <Info className="h-4 w-4" />
                   <AlertDescription>
-                    Your font will be delivered as OTF, TTF, and WOFF formats for maximum compatibility. Base price:
-                    $14.99
+                    {t("aiStudio.font.info")}
                   </AlertDescription>
                 </Alert>
 
@@ -392,12 +362,12 @@ export default function FontGeneratorPage() {
                   {isGenerating ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Creating your custom font...
+                      {t("aiStudio.font.buttons.generating")}
                     </>
                   ) : (
                     <>
                       <Sparkles className="mr-2 h-4 w-4" />
-                      Generate Font
+                      {t("aiStudio.font.buttons.generate")}
                     </>
                   )}
                 </Button>
@@ -408,22 +378,22 @@ export default function FontGeneratorPage() {
           <div className="animate-slide-in-right">
             <Card className="h-full">
               <CardHeader>
-                <CardTitle>Preview</CardTitle>
-                <CardDescription>Your AI-generated font will appear here</CardDescription>
+                <CardTitle>{t("aiStudio.font.preview.title")}</CardTitle>
+                <CardDescription>{t("aiStudio.font.preview.empty")}</CardDescription>
               </CardHeader>
               <CardContent className="flex flex-col items-center justify-center min-h-[400px]">
                 {isGenerating ? (
                   <div className="text-center">
                     <Loader2 className="h-16 w-16 animate-spin text-purple-600 mx-auto mb-4" />
-                    <p className="text-gray-600">Generating your font...</p>
-                    <p className="text-sm text-gray-500 mt-2">This may take up to 30 seconds</p>
+                    <p className="text-gray-600">{t("aiStudio.font.preview.generating")}</p>
+                    <p className="text-sm text-gray-500 mt-2">{t("aiStudio.font.preview.mayTake")}</p>
                   </div>
                 ) : generatedFont ? (
                   <div className="relative animate-scale-in w-full">
                     <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
                       <img
                         src={generatedFont || "/placeholder.svg"}
-                        alt="Generated Font"
+                        alt={t("aiStudio.font.title")}
                         className="max-w-full h-auto mx-auto"
                         style={{ maxHeight: "300px" }}
                       />
@@ -437,21 +407,21 @@ export default function FontGeneratorPage() {
                         className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:opacity-90 text-white"
                       >
                         <ShoppingCart className="mr-2 h-4 w-4" />
-                        Choose Delivery Option
+                        {t("aiStudio.font.buttons.chooseDelivery")}
                       </Button>
                       <Button onClick={handleGenerate} variant="outline" className="w-full">
                         <RefreshCw className="mr-2 h-4 w-4" />
-                        Generate Another
+                        {t("aiStudio.font.buttons.generateAnother")}
                       </Button>
                     </div>
                   </div>
                 ) : (
                   <div className="text-center text-gray-400">
                     <Type className="h-16 w-16 mx-auto mb-4" />
-                    <p>Your font preview will appear here</p>
+                    <p>{t("aiStudio.font.preview.empty")}</p>
                     {sampleText && (
                       <div className="mt-4 p-4 border border-dashed border-gray-300 rounded-lg">
-                        <p className="text-gray-500 italic">Sample: {sampleText}</p>
+                        <p className="text-gray-500 italic">{t("aiStudio.font.preview.samplePrefix")} {sampleText}</p>
                       </div>
                     )}
                   </div>

@@ -1,6 +1,7 @@
 "use client"
 
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
+import { useAuth } from "@/lib/auth-context"
 
 // Define digital product types
 export type DigitalProductType = "logo" | "image" | "font"
@@ -119,6 +120,8 @@ export function DigitalCartProvider({ children }: { children: ReactNode }) {
   const [itemCount, setItemCount] = useState(0)
   const [subtotal, setSubtotal] = useState(0)
   const [isInitialized, setIsInitialized] = useState(false)
+  const { user } = useAuth()
+  const storageKey = user?.id ? `digitalCart:${user.id}` : "digitalCart:guest"
 
   // Calculate item price based on selected options
   const calculateItemPrice = (item: DigitalCartItem): number => {
@@ -150,11 +153,11 @@ export function DigitalCartProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  // Load cart from localStorage on initial render
+  // Load cart from localStorage on user change
   useEffect(() => {
     try {
       if (typeof window !== "undefined") {
-        const savedCart = localStorage.getItem("digitalCart")
+        const savedCart = localStorage.getItem(storageKey)
         console.log("Loading digital cart from localStorage:", savedCart)
 
         if (savedCart) {
@@ -182,10 +185,11 @@ export function DigitalCartProvider({ children }: { children: ReactNode }) {
             }
           } catch (parseError) {
             console.error("Failed to parse digital cart:", parseError)
-            localStorage.removeItem("digitalCart")
+            localStorage.removeItem(storageKey)
           }
         } else {
           console.log("No digital cart found in localStorage")
+          setItems([])
         }
       }
     } catch (error) {
@@ -193,7 +197,7 @@ export function DigitalCartProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsInitialized(true)
     }
-  }, [])
+  }, [storageKey])
 
   // Update localStorage and calculations when items change
   useEffect(() => {
@@ -211,12 +215,12 @@ export function DigitalCartProvider({ children }: { children: ReactNode }) {
         setSubtotal(total)
 
         // Save to localStorage
-        localStorage.setItem("digitalCart", JSON.stringify(items))
+        localStorage.setItem(storageKey, JSON.stringify(items))
       }
     } catch (error) {
       console.error("Failed to update digital cart:", error)
     }
-  }, [items, isInitialized])
+  }, [items, isInitialized, storageKey])
 
   const addItem = async (item: Omit<DigitalCartItem, "id" | "createdAt" | "finalPrice">) => {
     console.log("🛒 addItem called with:", item)
@@ -322,6 +326,30 @@ export function DigitalCartProvider({ children }: { children: ReactNode }) {
   const clearCart = () => {
     try {
       setItems([])
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.removeItem(storageKey)
+        } catch {}
+        try {
+          localStorage.removeItem("digitalCart")
+        } catch {}
+        try {
+          localStorage.removeItem("digitalCart:guest")
+        } catch {}
+        try {
+          const keysToRemove: string[] = []
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i)
+            if (!key) continue
+            if (key.startsWith("digitalCart:")) keysToRemove.push(key)
+          }
+          keysToRemove.forEach((k) => {
+            try {
+              localStorage.removeItem(k)
+            } catch {}
+          })
+        } catch {}
+      }
       console.log("Digital cart cleared")
     } catch (error) {
       console.error("Failed to clear digital cart:", error)

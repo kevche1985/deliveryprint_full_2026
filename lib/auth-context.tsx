@@ -13,6 +13,8 @@ type UserProfile = {
   email: string
   role: "admin" | "operator" | "customer" | "supplier"
   status: "active" | "suspended" | "pending"
+  phone?: string | null
+  address?: any | null
 }
 
 type AuthContextType = {
@@ -200,15 +202,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           last_name: user.user_metadata?.last_name || '',
           email: user.email || '',
           role: 'customer',
-          status: 'active'
+          status: 'active',
+          phone: null,
+          address: null
         }
         setProfile(defaultProfile)
         setRole('customer')
         setCanManageStatus(false)
         console.log('✅ Using default profile for user')
       } else {
-        setProfile(profileData)
-        setRole(profileData.role)
+        setProfile(profileData as any)
+        setRole((profileData as any).role)
         setCanManageStatus(profileData.role === 'admin' || profileData.role === 'operator')
         console.log(`✅ Profile loaded: ${profileData.role} user`)
       }
@@ -226,7 +230,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         last_name: user.user_metadata?.last_name || '',
         email: user.email || '',
         role: 'customer',
-        status: 'active'
+        status: 'active',
+        phone: null,
+        address: null
       }
       setProfile(defaultProfile)
       setRole('customer')

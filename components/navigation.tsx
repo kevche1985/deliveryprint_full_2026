@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
@@ -9,6 +9,7 @@ import { useDigitalCart } from "@/lib/digital-cart-context"
 import { useLanguage } from "@/lib/language-context"
 import { LanguageSwitcher } from "@/components/language-switcher"
 import { Button } from "@/components/ui/button"
+import { getTheme } from "@/lib/theme"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,10 +33,33 @@ import { Menu, X, ShoppingCart, User, Sparkles, Trash2, ChevronDown, Printer } f
 export default function Navigation() {
   const { user, profile, signOut } = useAuth()
   const { items, itemCount, subtotal, removeItem, updateQuantity } = useCart()
-  const { items: digitalItems, itemCount: digitalItemCount } = useDigitalCart()
+  const { items: digitalItems, itemCount: digitalItemCount, removeItem: removeDigitalItem } = useDigitalCart()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const pathname = usePathname()
   const { t } = useLanguage()
+
+  const [webVis, setWebVis] = useState<Record<string, boolean>>({
+    products: true,
+    services: true,
+    services_digital_printing: true,
+    services_large_format: true,
+    services_event_stands: true,
+    services_illuminated_signs: true,
+    aiStudio: true,
+    supplierPortal: true,
+  })
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await fetch("/api/navigation/modules")
+        const json = await res.json().catch(() => ({}))
+        const incoming = json?.web_modules_visibility || {}
+        setWebVis((prev) => ({ ...prev, ...incoming }))
+      } catch {}
+    }
+    load()
+  }, [])
 
   // Combine regular cart and digital cart counts
   const totalCartItems = itemCount + digitalItemCount
@@ -54,24 +78,30 @@ export default function Navigation() {
         <div className="flex justify-between items-center h-16">
           <div className="flex items-center">
             <Link href="/" className="flex items-center space-x-3">
-              <img src="/images/logo-print.png" alt="DeliveryPrint Logo" className="h-10 w-10 rounded-lg" />
-              <span className="text-2xl font-bold text-[#8B0000]">DeliveryPrint</span>
+              <img
+                src="https://dzlqddocovzijnfwygap.supabase.co/storage/v1/object/public/web-images/logo%20delivery%20fondo%20blanco.png"
+                alt="DeliveryPrint Logo"
+                className="h-12 w-auto object-contain"
+              />
             </Link>
           </div>
 
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center space-x-8">
-            <Link
+            {webVis.products && (
+              <Link
               href="/products"
               className={`${
                 isActive("/products") ? "text-[#8B0000] font-medium" : "text-gray-700"
               } hover:text-[#8B0000]`}
             >
               {t("navigation.products")}
-            </Link>
+              </Link>
+            )}
 
             {/* Services Dropdown */}
-            <DropdownMenu>
+            {webVis.services && (
+              <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
@@ -89,22 +119,32 @@ export default function Navigation() {
                   <Link href="/services">{t("services.all")}</Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
+                  {webVis.services_digital_printing && (
+                    <DropdownMenuItem asChild>
                   <Link href="/services/digital-printing">{t("services.digitalPrinting")}</Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
+                    </DropdownMenuItem>
+                  )}
+                  {webVis.services_large_format && (
+                    <DropdownMenuItem asChild>
                   <Link href="/services/large-format">{t("services.largeFormat")}</Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
+                    </DropdownMenuItem>
+                  )}
+                  {webVis.services_event_stands && (
+                    <DropdownMenuItem asChild>
                   <Link href="/services/event-stands">{t("services.eventStands")}</Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
+                    </DropdownMenuItem>
+                  )}
+                  {webVis.services_illuminated_signs && (
+                    <DropdownMenuItem asChild>
                   <Link href="/services/illuminated-signs">{t("services.illuminatedSigns")}</Link>
-                </DropdownMenuItem>
+                    </DropdownMenuItem>
+                  )}
               </DropdownMenuContent>
-            </DropdownMenu>
+              </DropdownMenu>
+            )}
 
-            <Link
+            {webVis.aiStudio && (
+              <Link
               href="/ai-studio"
               className={`${
                 isActive("/ai-studio") ? "text-[#8B0000] font-medium" : "text-gray-700"
@@ -112,9 +152,10 @@ export default function Navigation() {
             >
               <Sparkles className="mr-1 h-4 w-4" />
               {t("navigation.aiStudio")}
-            </Link>
+              </Link>
+            )}
 
-            {profile?.role === "supplier" && (
+            {profile?.role === "supplier" && webVis.supplierPortal && (
               <Link
                 href="/supplier/dashboard"
                 className={`${
@@ -143,8 +184,12 @@ export default function Navigation() {
                     <Link href="/admin/products">{t("products.title")}</Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
-                    <Link href="/admin/services">Services</Link>
+                    <Link href="/admin/services">{t("admin.nav.services")}</Link>
                   </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/admin/coupons">{t("admin.nav.coupons")}</Link>
+                  </DropdownMenuItem>
+                  
                   <DropdownMenuItem asChild>
                     <Link href="/admin/users">{t("users.title")}</Link>
                   </DropdownMenuItem>
@@ -221,10 +266,7 @@ export default function Navigation() {
                                 variant="ghost"
                                 size="icon"
                                 className="h-6 w-6 text-gray-400 hover:text-red-500"
-                                onClick={() => {
-                                  // Remove from digital cart
-                                  console.log("Remove digital item:", item.id)
-                                }}
+                                onClick={() => removeDigitalItem(item.id)}
                               >
                                 <Trash2 className="h-4 w-4" />
                               </Button>
@@ -409,10 +451,7 @@ export default function Navigation() {
                                 variant="ghost"
                                 size="icon"
                                 className="h-6 w-6 text-gray-400 hover:text-red-500"
-                                onClick={() => {
-                                  // Remove from digital cart
-                                  console.log("Remove digital item:", item.id)
-                                }}
+                                onClick={() => removeDigitalItem(item.id)}
                               >
                                 <Trash2 className="h-4 w-4" />
                               </Button>
@@ -586,12 +625,20 @@ export default function Navigation() {
                     >
                       {t("navigation.admin")}
                     </Link>
+                    
                     <Link
                       href="/admin/orders"
                       className="block px-4 py-2 text-gray-700 hover:bg-gray-100 rounded"
                       onClick={() => setMobileMenuOpen(false)}
                     >
                       {t("orders.title")}
+                    </Link>
+                    <Link
+                      href="/admin/coupons"
+                      className="block px-4 py-2 text-gray-700 hover:bg-gray-100 rounded"
+                      onClick={() => setMobileMenuOpen(false)}
+                    >
+                      Coupons
                     </Link>
                     <Link
                       href="/admin/products"

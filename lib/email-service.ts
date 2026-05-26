@@ -344,6 +344,9 @@ class EmailService {
     customerName: string
     orderNumber: string
     orderTotal: string
+    paymentMethod?: string
+    orderUrl?: string
+    estimatedDelivery?: string
     orderItems: Array<{
       name: string
       quantity: number
@@ -358,6 +361,10 @@ class EmailService {
         customer_name: orderData.customerName,
         order_number: orderData.orderNumber,
         order_total: orderData.orderTotal,
+        total_amount: orderData.orderTotal,
+        payment_method: orderData.paymentMethod || "",
+        estimated_delivery: orderData.estimatedDelivery || "",
+        order_url: orderData.orderUrl || "",
         order_items: orderData.orderItems,
         order_date: new Date().toLocaleDateString(),
       },
@@ -502,6 +509,9 @@ export const sendOrderConfirmationEmail = (orderData: {
   customerName: string
   orderNumber: string
   orderTotal: string
+  paymentMethod?: string
+  orderUrl?: string
+  estimatedDelivery?: string
   orderItems: Array<{
     name: string
     quantity: number

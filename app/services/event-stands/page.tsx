@@ -118,7 +118,7 @@ const eventStandProducts = [
 ]
 
 export default function EventStandsPage() {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const [selectedProduct, setSelectedProduct] = useState(eventStandProducts[0])
   const [selectedSize, setSelectedSize] = useState(eventStandProducts[0].sizes[0])
   const [quantity, setQuantity] = useState(1)
@@ -161,14 +161,14 @@ export default function EventStandsPage() {
       productId: `event-stands-${selectedProduct.id}`,
       variantId: `${selectedProduct.id}-${selectedSize.name}`,
       designId: undefined,
-      name: `${selectedProduct.name} - ${selectedSize.name}`,
+      name: `${selectedProduct.name} - ${language === "es" ? localizeSizeName(selectedSize.name) : selectedSize.name}`,
       price: unitPriceWithRush,
       quantity,
       image: selectedProduct.image || "/placeholder.svg?height=200&width=300",
       customizations: {
         product: selectedProduct,
-        size: selectedSize.name,
-        dimensions: selectedSize.dimensions,
+        size: language === "es" ? localizeSizeName(selectedSize.name) : selectedSize.name,
+        dimensions: language === "es" ? localizeDimensions(selectedSize.dimensions) : selectedSize.dimensions,
         designNotes: customizations.designNotes,
         rushOrder: customizations.rushOrder,
         designFile: customizations.designFile?.name,
@@ -184,6 +184,53 @@ export default function EventStandsPage() {
 
   const handleCustomDesign = () => {
     setShowDesignEditor(true)
+  }
+
+  const feetToMeters = (ft: number) => Number((ft * 0.3048).toFixed(2))
+  const inchesToCm = (inches: number) => Math.round(inches * 2.54)
+
+  const convertUnitsInString = (text: string) => {
+    // Convert feet to meters (e.g., "8ft" -> "2.44 m")
+    let result = text.replace(/(\d+(?:\.\d+)?)\s*ft/gi, (_, n) => `${feetToMeters(parseFloat(n))} m`)
+    // Convert inches to cm (e.g., 33" -> 84 cm)
+    result = result.replace(/(\d+(?:\.\d+)?)\s*"/g, (_, n) => `${inchesToCm(parseFloat(n))} cm`)
+    return result
+  }
+
+  const localizeSizeName = (name: string) => {
+    const translated = name
+      .replace(/Straight/gi, "Recto")
+      .replace(/Curved/gi, "Curvo")
+    return convertUnitsInString(translated)
+  }
+
+  const localizeDimensions = (dim: string) => {
+    // Example inputs: "8ft W x 7.5ft H", '33" W x 79" H', "10ft W x 20ft D x 8ft H"
+    const partMap: Record<string, string> = { W: "ancho", H: "alto", D: "profundidad" }
+    const parts = dim.split(" x ").map((p) => p.trim())
+    const localized = parts
+      .map((p) => {
+        const match = p.match(/(.+)\s([WHD])/i)
+        if (match) {
+          const value = convertUnitsInString(match[1].trim())
+          const label = partMap[match[2].toUpperCase()] || match[2]
+          // Also provide cm in parentheses if we converted from feet
+          const feetMatch = match[1].match(/(\d+(?:\.\d+)?)\s*ft/i)
+          const inchesMatch = match[1].match(/(\d+(?:\.\d+)?)\s*"/)
+          let extra = ""
+          if (feetMatch) {
+            const meters = feetToMeters(parseFloat(feetMatch[1]))
+            extra = ` (${Math.round(meters * 100)} cm)`
+          } else if (inchesMatch) {
+            const cm = inchesToCm(parseFloat(inchesMatch[1]))
+            extra = ` (${cm} cm)`
+          }
+          return `${value}${extra} de ${label}`
+        }
+        return convertUnitsInString(p)
+      })
+      .join(" × ")
+    return localized
   }
 
   return (
@@ -247,7 +294,7 @@ export default function EventStandsPage() {
                           <p className="text-sm text-gray-600 mt-1">{t(`services.eventStandsPage.products.${product.id}.description`)}</p>
                           <div className="flex items-center justify-between mt-2">
                             <Badge variant="outline">{t(`services.eventStandsPage.categories.${product.categoryKey}`)}</Badge>
-                            <span className="font-semibold text-red-600">{t("common.from")} ${product.basePrice}</span>
+                            {/* Price removed */}
                           </div>
                         </div>
                       </div>
@@ -256,61 +303,14 @@ export default function EventStandsPage() {
                 </div>
               </div>
 
-              {/* Size Selection */}
-              <div className="space-y-3">
-                <Label>{t("services.eventStandsPage.sizeConfig")}</Label>
-                <Select value={selectedProduct.sizes.indexOf(selectedSize).toString()} onValueChange={handleSizeChange}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {selectedProduct.sizes.map((size, index) => (
-                      <SelectItem key={index} value={index.toString()}>
-                        <div className="flex justify-between items-center w-full">
-                          <span>{size.name}</span>
-                          <span className="ml-4 font-semibold">{size.price > 0 ? `$${size.price}` : t("common.quote")}</span>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-sm text-gray-600">{t("services.eventStandsPage.dimensions")} {selectedSize.dimensions}</p>
-              </div>
+              {/* Configuration removed */}
 
-              {/* Quantity */}
-              <div className="space-y-3">
-                <Label>{t("services.eventStandsPage.quantity")}</Label>
-                <Input
-                  type="number"
-                  min="1"
-                  max="100"
-                  value={quantity}
-                  onChange={(e) => setQuantity(Math.max(1, Number.parseInt(e.target.value) || 1))}
-                  className="w-24"
-                />
-              </div>
-
-              {/* Design Notes */}
-              <div className="space-y-3">
-                <Label>{t("services.eventStandsPage.designRequirements")}</Label>
-                <Textarea
-                  placeholder={t("services.eventStandsPage.designRequirementsPlaceholder")}
-                  value={customizations.designNotes}
-                  onChange={(e) => setCustomizations({ ...customizations, designNotes: e.target.value })}
-                  rows={4}
-                />
-              </div>
-
-              {/* Rush Order */}
-              <div className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  id="rushOrder"
-                  checked={customizations.rushOrder}
-                  onChange={(e) => setCustomizations({ ...customizations, rushOrder: e.target.checked })}
-                  className="rounded"
-                />
-                <Label htmlFor="rushOrder">{t("services.eventStandsPage.rushOrderLabel")}</Label>
+              {/* Inputs removed */}
+              <div className="mt-4">
+                <Button onClick={() => setShowQuoteModal(true)} className="bg-red-600 hover:bg-red-700">
+                  <FileText className="h-4 w-4 mr-2" />
+                  {t("services.eventStandsPage.buttons.getCustomQuote")}
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -344,60 +344,13 @@ export default function EventStandsPage() {
             </CardContent>
           </Card>
 
-          {/* Pricing & Actions */}
+          {/* Actions */}
           <Card>
-            <CardHeader>
-              <CardTitle>{t("services.eventStandsPage.orderSummaryTitle")}</CardTitle>
-            </CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <div className="flex justify-between">
-                  <span>{t("services.eventStandsPage.basePrice")} ({selectedSize.name})</span>
-                  <span>${selectedSize.price}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>{t("services.eventStandsPage.quantity")}</span>
-                  <span>×{quantity}</span>
-                </div>
-                {customizations.rushOrder && (
-                  <div className="flex justify-between text-orange-600">
-                    <span>{t("services.eventStandsPage.rushOrderFee")}</span>
-                    <span>+${(selectedSize.price * quantity * 0.5).toFixed(2)}</span>
-                  </div>
-                )}
-                <div className="border-t pt-2">
-                  <div className="flex justify-between font-bold text-lg">
-                    <span>{t("services.eventStandsPage.total")}</span>
-                    <span className="text-red-600">${calculateTotal().toFixed(2)}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                {selectedSize.price > 0 ? (
-                  <>
-                    <Button onClick={handleAddToCart} className="w-full bg-red-600 hover:bg-red-700">
-                      <ShoppingCart className="h-4 w-4 mr-2" />
-                      {t("services.eventStandsPage.buttons.addToCart")}
-                    </Button>
-                    <Button onClick={handleCustomDesign} variant="outline" className="w-full bg-transparent">
-                      <Palette className="h-4 w-4 mr-2" />
-                      {t("services.eventStandsPage.buttons.customizeDesign")}
-                    </Button>
-                  </>
-                ) : (
-                  <Button onClick={() => setShowQuoteModal(true)} className="w-full bg-blue-600 hover:bg-blue-700">
-                    <FileText className="h-4 w-4 mr-2" />
-                    {t("services.eventStandsPage.buttons.getCustomQuote")}
-                  </Button>
-                )}
-              </div>
-
-              <div className="text-center">
-                <Button onClick={() => setShowQuoteModal(true)} variant="ghost" className="text-sm">
-                  {t("services.eventStandsPage.buttons.needHelpQuote")}
-                </Button>
-              </div>
+              <Button onClick={() => setShowQuoteModal(true)} className="w-full bg-red-600 hover:bg-red-700">
+                <FileText className="h-4 w-4 mr-2" />
+                {t("services.eventStandsPage.buttons.getCustomQuote")}
+              </Button>
             </CardContent>
           </Card>
 
@@ -442,12 +395,10 @@ export default function EventStandsPage() {
         isOpen={showQuoteModal}
         onClose={() => setShowQuoteModal(false)}
         serviceType={t("services.eventStands")}
-        prefilledData={{
-          product: selectedProduct.name,
-          size: selectedSize.name,
-          quantity: quantity,
-          notes: customizations.designNotes,
-        }}
+          prefilledData={{
+            product: selectedProduct.name,
+            notes: "",
+          }}
       />
 
       {/* Design Editor Modal */}
@@ -455,7 +406,7 @@ export default function EventStandsPage() {
         <DesignServiceEditor
           isOpen={showDesignEditor}
           onClose={() => setShowDesignEditor(false)}
-          productName={`${selectedProduct.name} - ${selectedSize.name}`}
+          productName={`${selectedProduct.name} - ${language === "es" ? localizeSizeName(selectedSize.name) : selectedSize.name}`}
           productImage={selectedProduct.image}
           onSave={(designData) => {
             console.log("Design saved:", designData)

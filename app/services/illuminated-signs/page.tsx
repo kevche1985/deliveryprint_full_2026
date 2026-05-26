@@ -11,6 +11,7 @@ import { useCart } from "@/lib/cart-context"
 import { useToast } from "@/hooks/use-toast"
 import { useLanguage } from "@/lib/language-context"
 import { Zap, Eye, Clock } from "lucide-react"
+import QuoteRequestModal from "@/components/quote-request-modal"
 
 const illuminatedSignProducts = [
   {
@@ -213,6 +214,7 @@ export default function IlluminatedSignsPage() {
   }
 
   return (
+    <>
     <div className="container mx-auto px-4 py-8">
       {/* Header */}
       <div className="text-center mb-12">
@@ -269,11 +271,8 @@ export default function IlluminatedSignsPage() {
                         <div className="flex-1">
                           <h3 className="font-semibold">{t(`services.illuminatedSignsPage.products.${product.id}.name`)}</h3>
                           <p className="text-sm text-gray-600 mt-1">{t(`services.illuminatedSignsPage.products.${product.id}.description`)}</p>
-                          <div className="flex items-center justify-between mt-2">
+                          <div className="flex items-center mt-2">
                             <Badge variant="outline">{t(`services.illuminatedSignsPage.products.${product.id}.category`)}</Badge>
-                            <span className="font-semibold text-red-600">
-                              {t("common.from")} ${product.basePrice} {t(`services.illuminatedSignsPage.products.${product.id}.unit`)}
-                            </span>
                           </div>
                         </div>
                       </div>
@@ -282,85 +281,14 @@ export default function IlluminatedSignsPage() {
                 </div>
               </div>
 
-              {/* Size Selection */}
-              <div className="space-y-3">
-                <Label>{t("services.illuminatedSignsPage.sizeConfig")}</Label>
-                <Select value={selectedProduct.sizes.indexOf(selectedSize).toString()} onValueChange={handleSizeChange}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {selectedProduct.sizes.map((size, index) => (
-                      <SelectItem key={index} value={index.toString()}>
-                        <div className="flex justify-between items-center w-full">
-                          <span>{localizeText(size.name)}</span>
-                          <span className="ml-4 font-semibold">
-                            {size.price > 0 ? `$${size.price}` : t("common.quote")}
-                          </span>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-sm text-gray-600">{t("services.illuminatedSignsPage.dimensions")} {localizeText(selectedSize.dimensions)}</p>
-              </div>
-
-              {/* Quantity */}
-              <div className="space-y-3">
-                <Label>{t("services.illuminatedSignsPage.quantity")}</Label>
-                <Input
-                  type="number"
-                  min="1"
-                  max="100"
-                  value={quantity}
-                  onChange={(e) => setQuantity(Math.max(1, Number.parseInt(e.target.value) || 1))}
-                  className="w-24"
-                />
-              </div>
-
-              {/* Color Preference */}
-              <div className="space-y-3">
-                <Label>{t("services.illuminatedSignsPage.colorPreference")}</Label>
-                <Input
-                  placeholder={t("services.illuminatedSignsPage.colorPreferencePlaceholder")}
-                  value={customizations.colorPreference}
-                  onChange={(e) => setCustomizations({ ...customizations, colorPreference: e.target.value })}
-                />
-              </div>
-
-              {/* Design Notes */}
-              <div className="space-y-3">
-                <Label>{t("services.illuminatedSignsPage.designRequirements")}</Label>
-                <Textarea
-                  placeholder={t("services.illuminatedSignsPage.designRequirementsPlaceholder")}
-                  value={customizations.designNotes}
-                  onChange={(e) => setCustomizations({ ...customizations, designNotes: e.target.value })}
-                  rows={4}
-                />
-              </div>
-
-              {/* Installation */}
-              <div className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  id="installation"
-                  checked={customizations.installationNeeded}
-                  onChange={(e) => setCustomizations({ ...customizations, installationNeeded: e.target.checked })}
-                  className="rounded"
-                />
-                <Label htmlFor="installation">{t("services.illuminatedSignsPage.installationLabel")}</Label>
-              </div>
-
-              {/* Rush Order */}
-              <div className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  id="rushOrder"
-                  checked={customizations.rushOrder}
-                  onChange={(e) => setCustomizations({ ...customizations, rushOrder: e.target.checked })}
-                  className="rounded"
-                />
-                <Label htmlFor="rushOrder">{t("services.illuminatedSignsPage.rushOrderLabel")}</Label>
+              {/* Configuration removed; show quotation button */}
+              <div className="mt-4">
+                <button
+                  onClick={() => setShowQuoteModal(true)}
+                  className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded"
+                >
+                  {t("services.eventStandsPage.buttons.getCustomQuote")}
+                </button>
               </div>
             </CardContent>
           </Card>
@@ -399,9 +327,39 @@ export default function IlluminatedSignsPage() {
             </CardContent>
           </Card>
 
-          {/* Pricing & Actions */}
+          {/* Actions */}
+          <Card>
+            <CardContent>
+              <button
+                onClick={() => setShowQuoteModal(true)}
+                className="w-full bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded"
+              >
+                {t("services.eventStandsPage.buttons.getCustomQuote")}
+              </button>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>
+    {/* Quote Request Modal */}
+    {showQuoteModal && (
+      <QuoteRequestModal
+        isOpen={showQuoteModal}
+        onClose={() => setShowQuoteModal(false)}
+        serviceType={t("services.illuminatedSignsPage.headerTitle")}
+        prefilledData={{
+          productId: selectedProduct.id,
+          productName: t(`services.illuminatedSignsPage.products.${selectedProduct.id}.name`),
+          size: selectedSize?.name,
+          dimensions: selectedSize?.dimensions,
+          quantity,
+          colorPreference: customizations.colorPreference,
+          installationNeeded: customizations.installationNeeded,
+          rushOrder: customizations.rushOrder,
+          notes: customizations.designNotes,
+        }}
+      />
+    )}
+  </>
   )
 }

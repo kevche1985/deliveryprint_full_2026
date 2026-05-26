@@ -15,7 +15,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { Search, Eye, Edit, Package, Truck, CheckCircle, XCircle, Download, FileText, Printer, Loader2 } from "lucide-react"
+import { Search, Eye, Edit, Package, Truck, CheckCircle, XCircle, Download, FileText, Loader2 } from "lucide-react"
 import { motion } from "framer-motion"
 import { useToast } from "@/hooks/use-toast"
 import { supabase } from "@/lib/supabase"
@@ -88,37 +88,36 @@ export default function OrderManagement() {
 
   const loadOrders = async () => {
     try {
-      const { data, error } = await supabase
-        .from("orders")
-        .select(`
-          *,
-          order_items (
-            id,
-            name,
-            quantity,
-            price,
-            customizations,
-            design_file_url,
-            product_image_url,
-            design_image_url,
-            customized_image_url,
-            print_ready_file_url,
-            product_id,
-            digital_product_id,
-            digital_product:digital_products (
-              id,
-              download_url,
-              preview_url,
-              type
-            )
-          )
-        `)
-        .order("created_at", { ascending: false })
-  
-      if (error) throw error
+      let token = ""
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        token = session?.access_token || ""
+      } catch {}
+
+      const resp = await fetch("/api/admin/orders", {
+        cache: "no-store",
+        credentials: "include",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      })
+
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => "")
+        throw new Error(text || `Request failed: ${resp.status}`)
+      }
+
+      const { orders } = await resp.json().catch(() => ({ orders: [] }))
       
       // Parse JSON fields and convert string numbers to actual numbers
-      const processedOrders = (data || []).map(order => ({
+      const safeParseAddress = (value: unknown) => {
+        if (!value) return value
+        if (typeof value !== "string") return value
+        try {
+          return JSON.parse(value)
+        } catch {
+          return value
+        }
+      }
+      const processedOrders = (orders || []).map((order: any) => ({
         ...order,
         // Convert string numbers to actual numbers
         subtotal: parseFloat(order.subtotal) || 0,
@@ -127,12 +126,8 @@ export default function OrderManagement() {
         discount: parseFloat(order.discount) || 0,
         total: parseFloat(order.total) || 0,
         // Parse JSON address fields
-        shipping_address: typeof order.shipping_address === 'string' 
-          ? JSON.parse(order.shipping_address) 
-          : order.shipping_address,
-        billing_address: typeof order.billing_address === 'string' 
-          ? JSON.parse(order.billing_address) 
-          : order.billing_address,
+        shipping_address: safeParseAddress(order.shipping_address),
+        billing_address: safeParseAddress(order.billing_address),
       }))
       
       setOrders(processedOrders)
@@ -185,13 +180,15 @@ export default function OrderManagement() {
     }
   }
 
-  const downloadDesignFile = async (item: OrderItem) => {
-    // Priority: digital_product.download_url > print_ready_file_url > design_file_url > customized_image_url
-    const downloadUrl = item.digital_product?.download_url || 
-                       item.print_ready_file_url || 
-                       item.design_file_url || 
-                       item.customized_image_url
-    
+  const downloadOrderItemFile = async (
+    item: OrderItem,
+    kind: "purchased_design" | "design_print_ready",
+  ) => {
+    const downloadUrl =
+      kind === "purchased_design"
+        ? item.digital_product?.download_url || item.digital_product?.preview_url
+        : item.print_ready_file_url || item.design_file_url || item.design_image_url
+
     if (!downloadUrl) {
       toast({
         title: t("admin.orders.toasts.noDesignFileTitle"),
@@ -203,10 +200,14 @@ export default function OrderManagement() {
 
     setDownloadingDesign(item.id)
     try {
-      // Create a temporary link and trigger download
-      const link = document.createElement('a')
+      const link = document.createElement("a")
       link.href = downloadUrl
-      link.download = `${item.name}-design.${downloadUrl.split('.').pop()}`
+
+      const urlWithoutQuery = downloadUrl.split("?")[0] || downloadUrl
+      const ext = urlWithoutQuery.includes(".") ? urlWithoutQuery.split(".").pop() : undefined
+      const suffix = kind === "purchased_design" ? "purchased" : "design"
+      link.download = `${item.name}-${suffix}${ext ? `.${ext}` : ""}`
+
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
@@ -216,7 +217,7 @@ export default function OrderManagement() {
         description: `${t("admin.orders.toasts.downloadStartedDescPrefix")} ${item.name}`,
       })
     } catch (error) {
-      console.error("Error downloading design file:", error)
+      console.error("Error downloading item file:", error)
       toast({
         title: t("admin.orders.toasts.downloadFailedTitle"),
         description: t("admin.orders.toasts.downloadFailedDesc"),
@@ -644,29 +645,43 @@ export default function OrderManagement() {
                                             </div>
                                             <div className="flex gap-2">
                                               {(() => {
-                                                // Priority for download: digital_product.download_url > print_ready_file_url > design_file_url > customized_image_url
-                                                const downloadUrl = item.digital_product?.download_url || 
-                                                                  item.print_ready_file_url || 
-                                                                  item.design_file_url || 
-                                                                  item.customized_image_url
-                                                
-                                                if (downloadUrl) {
-                                                  return (
-                                                    <Button
-                                                      variant="outline"
-                                                      size="sm"
-                                                      onClick={() => downloadDesignFile(item)}
-                                                      disabled={downloadingDesign === item.id}
-                                                    >
-                                                      {downloadingDesign === item.id ? (
-                                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                                      ) : (
-                                                        <Download className="h-4 w-4" />
-                                                      )}
-                                                    </Button>
-                                                  )
-                                                }
-                                                return null
+                                                const hasPurchasedDesign =
+                                                  !!(item.digital_product?.download_url || item.digital_product?.preview_url)
+                                                const hasDesignFile =
+                                                  !!(item.print_ready_file_url || item.design_file_url || item.design_image_url)
+
+                                                return (
+                                                  <>
+                                                    {hasPurchasedDesign && (
+                                                      <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() => downloadOrderItemFile(item, "purchased_design")}
+                                                        disabled={downloadingDesign === item.id}
+                                                      >
+                                                        {downloadingDesign === item.id ? (
+                                                          <Loader2 className="h-4 w-4 animate-spin" />
+                                                        ) : (
+                                                          <Download className="h-4 w-4" />
+                                                        )}
+                                                      </Button>
+                                                    )}
+                                                    {hasDesignFile && (
+                                                      <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() => downloadOrderItemFile(item, "design_print_ready")}
+                                                        disabled={downloadingDesign === item.id}
+                                                      >
+                                                        {downloadingDesign === item.id ? (
+                                                          <Loader2 className="h-4 w-4 animate-spin" />
+                                                        ) : (
+                                                          <Download className="h-4 w-4" />
+                                                        )}
+                                                      </Button>
+                                                    )}
+                                                  </>
+                                                )
                                               })()}
                                             </div>
                                           </div>
@@ -750,8 +765,6 @@ export default function OrderManagement() {
                                         </Button>
                                         {selectedOrder.payment_method === 'paypal' && (
                                           <Button variant="outline" size="sm" onClick={async () => {
-                                            const { data: session } = await supabase.auth.getSession()
-                                            const token = session.session?.access_token
                                             const resp = await fetch(`/api/payments/paypal/refund`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orderId: selectedOrder.id }) })
                                             const data = await resp.json()
                                             if (!resp.ok || !data.success) {

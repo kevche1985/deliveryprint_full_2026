@@ -23,6 +23,12 @@ import {
   ChevronDown,
   Mail,
   Printer,
+  Gift,
+  Tag,
+  Layers,
+  SlidersHorizontal,
+  Puzzle,
+  Image,
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -34,6 +40,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Loader2 } from "lucide-react"
 import { useLanguage } from "@/lib/language-context"
+import { usePathname } from "next/navigation"
 import { LanguageSwitcher } from "@/components/language-switcher"
 
 // Local profile type to ensure correct state typing
@@ -123,6 +130,7 @@ function AdminContent({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const router = useRouter()
   const { t } = useLanguage()
+  const pathname = usePathname()
 
   useEffect(() => {
     // Simple auth check without useAuth hook
@@ -250,34 +258,130 @@ function AdminContent({ children }: { children: React.ReactNode }) {
               </div>
             </div>
 
-            <nav className="space-y-1">
-              {[
-                { href: "/admin", icon: LayoutDashboard, title: t("admin.nav.dashboard"), description: t("admin.navDescriptions.dashboard") },
-                { href: "/admin/products", icon: Package, title: t("admin.nav.products"), description: t("admin.navDescriptions.products") },
-                { href: "/admin/services", icon: Printer, title: "Services", description: "Manage your services" },
-                { href: "/admin/orders", icon: ShoppingCart, title: t("admin.nav.orders"), description: t("admin.navDescriptions.orders") },
-                { href: "/admin/payments", icon: CreditCard, title: t("admin.nav.payments"), description: t("admin.navDescriptions.payments") },
-                { href: "/admin/transactions", icon: CreditCard, title: t("admin.nav.transactions"), description: t("admin.navDescriptions.transactions") },
-                { href: "/admin/users", icon: Users, title: t("admin.nav.users"), description: t("admin.navDescriptions.users") },
-                { href: "/admin/quotes", icon: FileText, title: t("admin.nav.quotes"), description: t("admin.navDescriptions.quotes") },
-                { href: "/admin/messages", icon: MessageSquare, title: t("admin.nav.messages"), description: t("admin.navDescriptions.messages") },
-                { href: "/admin/translations", icon: MessageSquare, title: t("admin.nav.translations"), description: t("admin.navDescriptions.translations") },
-                { href: "/admin/settings", icon: Settings, title: t("admin.nav.settings"), description: t("admin.navDescriptions.settings") },
-                { href: "/admin/email-settings", icon: Mail, title: t("admin.nav.emailSettings"), description: t("admin.navDescriptions.emailSettings") },
-              ].map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className="flex items-center px-3 py-2 text-sm font-medium text-gray-700 rounded-md hover:bg-gray-100 hover:text-gray-900 group"
-                  onClick={() => setSidebarOpen(false)}
-                >
-                  <item.icon className="mr-3 h-5 w-5 text-gray-400 group-hover:text-gray-500 flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <div>{item.title}</div>
-                    <div className="text-xs text-gray-500">{item.description}</div>
-                  </div>
-                </Link>
-              ))}
+            <nav className="space-y-6">
+              {/* QUICK LINKS */}
+              <div>
+                <div className="px-3 text-xs font-semibold text-gray-500 tracking-wider">{t("admin.sections.quickLinks")}</div>
+                <div className="mt-2 space-y-1">
+                  {[
+                    { href: "/admin", icon: LayoutDashboard, title: t("admin.nav.dashboard") },
+                    { href: "/admin/products", icon: Package, title: t("admin.nav.newProduct") },
+                    { href: "/admin/coupons", icon: Gift, title: t("admin.nav.newCoupon") },
+                  ].map((item) => {
+                    const active = pathname?.startsWith(item.href)
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        className={`flex items-center px-3 py-2 text-sm font-medium rounded-md ${active ? "bg-green-50 border-l-4 border-green-500" : "hover:bg-gray-100"}`}
+                        onClick={() => setSidebarOpen(false)}
+                      >
+                        <item.icon className={`mr-3 h-5 w-5 ${active ? "text-green-600" : "text-gray-400"}`} />
+                        <span className="truncate">{item.title}</span>
+                      </Link>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* CATALOG */}
+              <div>
+                <div className="px-3 text-xs font-semibold text-gray-500 tracking-wider">{t("admin.sections.catalog")}</div>
+                <div className="mt-2 space-y-1">
+                  {[
+                    { href: "/admin/products", icon: Package, title: t("admin.nav.products") },
+                    { href: "/admin/services", icon: Printer, title: t("admin.nav.services") },
+                    { href: "/admin/categories", icon: Tag, title: t("admin.nav.categories") },
+                    { href: "/admin/attributes", icon: SlidersHorizontal, title: t("admin.nav.attributes") },
+                  ].map((item) => {
+                    const active = pathname?.startsWith(item.href)
+                    return (
+                      <Link key={item.href} href={item.href} className={`flex items-center px-3 py-2 text-sm font-medium rounded-md ${active ? "bg-gray-100" : "hover:bg-gray-100"}`} onClick={() => setSidebarOpen(false)}>
+                        <item.icon className={`mr-3 h-5 w-5 ${active ? "text-gray-700" : "text-gray-400"}`} />
+                        <span className="truncate">{item.title}</span>
+                      </Link>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* SALE */}
+              <div>
+                <div className="px-3 text-xs font-semibold text-gray-500 tracking-wider">{t("admin.sections.sale")}</div>
+                <div className="mt-2 space-y-1">
+                  {[
+                    { href: "/admin/orders", icon: ShoppingCart, title: t("admin.nav.orders") },
+                    { href: "/admin/transactions", icon: CreditCard, title: t("admin.nav.transactions") },
+                  ].map((item) => {
+                    const active = pathname?.startsWith(item.href)
+                    return (
+                      <Link key={item.href} href={item.href} className={`flex items-center px-3 py-2 text-sm font-medium rounded-md ${active ? "bg-gray-100" : "hover:bg-gray-100"}`} onClick={() => setSidebarOpen(false)}>
+                        <item.icon className={`mr-3 h-5 w-5 ${active ? "text-gray-700" : "text-gray-400"}`} />
+                        <span className="truncate">{item.title}</span>
+                      </Link>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* CUSTOMER */}
+              <div>
+                <div className="px-3 text-xs font-semibold text-gray-500 tracking-wider">{t("admin.sections.customer")}</div>
+                <div className="mt-2 space-y-1">
+                  {[
+                    { href: "/admin/users", icon: Users, title: t("admin.nav.users") },
+                    { href: "/admin/messages", icon: MessageSquare, title: t("admin.nav.messages") },
+                  ].map((item) => {
+                    const active = pathname?.startsWith(item.href)
+                    return (
+                      <Link key={item.href} href={item.href} className={`flex items-center px-3 py-2 text-sm font-medium rounded-md ${active ? "bg-gray-100" : "hover:bg-gray-100"}`} onClick={() => setSidebarOpen(false)}>
+                        <item.icon className={`mr-3 h-5 w-5 ${active ? "text-gray-700" : "text-gray-400"}`} />
+                        <span className="truncate">{item.title}</span>
+                      </Link>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* PROMOTION */}
+              <div>
+                <div className="px-3 text-xs font-semibold text-gray-500 tracking-wider">{t("admin.sections.promotion")}</div>
+                <div className="mt-2 space-y-1">
+                  {[
+                    { href: "/admin/coupons", icon: Gift, title: t("admin.nav.coupons") },
+                    { href: "/admin/promo-banners", icon: Layers, title: t("admin.nav.promoBanners") },
+                  ].map((item) => {
+                    const active = pathname?.startsWith(item.href)
+                    return (
+                      <Link key={item.href} href={item.href} className={`flex items-center px-3 py-2 text-sm font-medium rounded-md ${active ? "bg-gray-100" : "hover:bg-gray-100"}`} onClick={() => setSidebarOpen(false)}>
+                        <item.icon className={`mr-3 h-5 w-5 ${active ? "text-gray-700" : "text-gray-400"}`} />
+                        <span className="truncate">{item.title}</span>
+                      </Link>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* CMS */}
+              <div>
+                <div className="px-3 text-xs font-semibold text-gray-500 tracking-wider">{t("admin.sections.cms")}</div>
+                <div className="mt-2 space-y-1">
+                  {[
+                    { href: "/admin/cms/branding/main-banner", icon: Image, title: "Branding" },
+                    { href: "/admin/translations", icon: FileText, title: t("admin.nav.translations") },
+                    { href: "/admin/widgets", icon: Puzzle, title: "Widgets" },
+                    { href: "/admin/modules", icon: Settings, title: "Modules" },
+                  ].map((item) => {
+                    const active = pathname?.startsWith(item.href)
+                    return (
+                      <Link key={item.href} href={item.href} className={`flex items-center px-3 py-2 text-sm font-medium rounded-md ${active ? "bg-gray-100" : "hover:bg-gray-100"}`} onClick={() => setSidebarOpen(false)}>
+                        <item.icon className={`mr-3 h-5 w-5 ${active ? "text-gray-700" : "text-gray-400"}`} />
+                        <span className="truncate">{item.title}</span>
+                      </Link>
+                    )
+                  })}
+                </div>
+              </div>
             </nav>
           </div>
 

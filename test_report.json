@@ -1,0 +1,42 @@
+{
+  "timestamp": "2026-02-03T15:10:00Z",
+  "suite": "localization",
+  "tests": [
+    {
+      "name": "TC019_Internationalization_Toggle_Between_English_and_Spanish",
+      "status": "passed",
+      "details": "Verified language toggle functionality and Hero/Subtitle localization on Home page."
+    },
+    {
+      "name": "TC024_Quote_Page_Localization",
+      "status": "passed",
+      "details": "Verified English/Spanish localization for Title, Labels, Placeholders, and Submit Button."
+    },
+    {
+      "name": "TC025_Services_Page_Localization",
+      "status": "passed",
+      "details": "Verified English/Spanish localization for Header, Hero, Section Titles, and Static Service content with Supabase fallback."
+    },
+    {
+      "name": "TC021_Orders_Page_Localization",
+      "status": "passed",
+      "details": "Verified English/Spanish localization for Auth Required message and Log In link on Orders page."
+    },
+    {
+      "name": "TC022_Order_Details_Localization",
+      "status": "passed",
+      "details": "Verified English/Spanish localization for Auth Required message and Log In button on Order Details page."
+    },
+    {
+      "name": "TC023_Order_Confirmation_Localization",
+      "status": "passed",
+      "details": "Verified English/Spanish localization for Auth Required message and Log In link on Order Confirmation page."
+    }
+  ],
+  "summary": {
+    "total": 6,
+    "passed": 6,
+    "failed": 0,
+    "skipped": 0
+  }
+}

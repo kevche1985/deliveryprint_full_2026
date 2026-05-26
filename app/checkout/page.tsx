@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -12,17 +12,21 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Separator } from "@/components/ui/separator"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Loader2, CreditCard, AlertCircle, Download } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { useCart } from "@/lib/cart-context"
 import { useDigitalCart } from "@/lib/digital-cart-context"
 import { useToast } from "@/hooks/use-toast"
-import { createOrder } from "@/lib/database"
+// Order creation now uses server API to support guest checkout
 import WompiPaymentModal from "@/components/wompi-payment-modal"
 import PayPalButton from "@/components/paypal-button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useLanguage } from "@/lib/language-context"
 import { track } from "@/lib/analytics"
+import { supabase } from "@/lib/supabase"
+import { EL_SALVADOR_LOCATIONS } from "@/lib/el-salvador-locations"
+import countriesData from "@/lib/countries-regions.json"
 
 const shippingMethods = [
   { id: "standard", name: "Regular Shipping", price: 3, description: "5-7 business days", value: "standard" },
@@ -58,7 +62,7 @@ const paymentMethods = [
 
 // Add this after the paymentMethods constant
 export default function CheckoutPage() {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const [activePaymentMethods, setActivePaymentMethods] = useState(paymentMethods)
   const router = useRouter()
   const { user, profile, loading } = useAuth()
@@ -72,6 +76,7 @@ export default function CheckoutPage() {
   const [showWompiModal, setShowWompiModal] = useState(false)
   const [showPayPalButtons, setShowPayPalButtons] = useState(false)
   const [currentOrder, setCurrentOrder] = useState<any>(null)
+  const [currentCheckoutReference, setCurrentCheckoutReference] = useState<string | null>(null)
   const [shippingMethod, setShippingMethod] = useState("standard")
   const [paymentMethod, setPaymentMethod] = useState("wompi")
   const [billingInfo, setBillingInfo] = useState({
@@ -80,9 +85,9 @@ export default function CheckoutPage() {
     email: "",
     phone: "",
     address: "",
-    city: "",
-    state: "",
-    zipCode: "",
+    city: "San Salvador Centro",
+    state: "San Salvador",
+    zipCode: "1101",
     country: "El Salvador",
   })
   const [sameAsBilling, setSameAsBilling] = useState(true)
@@ -91,14 +96,31 @@ export default function CheckoutPage() {
     lastName: "",
     phone: "",
     address: "",
-    city: "",
-    state: "",
-    zipCode: "",
+    city: "San Salvador Centro",
+    state: "San Salvador",
+    zipCode: "1101",
     country: "El Salvador",
   })
   const [notes, setNotes] = useState("")
   const [agreeToTerms, setAgreeToTerms] = useState(false)
   const [isDigitalOnly, setIsDigitalOnly] = useState(false)
+  const [isGuestCheckout, setIsGuestCheckout] = useState(false)
+  const [couponCode, setCouponCode] = useState("")
+  const [couponApplying, setCouponApplying] = useState(false)
+  const [couponDiscount, setCouponDiscount] = useState(0)
+  const [couponFreeShip, setCouponFreeShip] = useState(false)
+  const [couponError, setCouponError] = useState<string | null>(null)
+  const [useSavedAddress, setUseSavedAddress] = useState(false)
+  const [saveAddressToAccount, setSaveAddressToAccount] = useState(false)
+  // Commercial customer fiscal info placeholders
+  const [isCommercialCustomer, setIsCommercialCustomer] = useState(false)
+  const [fiscalMode, setFiscalMode] = useState<'numbers' | 'upload'>('numbers')
+  const [ivaNumber, setIvaNumber] = useState("")
+  const [cfNumber, setCfNumber] = useState("")
+  const [ivaFile, setIvaFile] = useState<File | null>(null)
+  const [cfFile, setCfFile] = useState<File | null>(null)
+  const ivaInputRef = useRef<HTMLInputElement | null>(null)
+  const cfInputRef = useRef<HTMLInputElement | null>(null)
 
   // CALCULATIONS - Move these before they're used
   const taxRate = 0.13 // 13% VAT in El Salvador
@@ -114,6 +136,12 @@ export default function CheckoutPage() {
   const combinedSubtotal = subtotal + digitalSubtotal
   const combinedTaxAmount = combinedSubtotal * taxRate
   const combinedTotal = combinedSubtotal + shippingCost + combinedTaxAmount
+
+  // Coupon-adjusted display values
+  const displaySubtotal = Math.max(0, combinedSubtotal - couponDiscount)
+  const displayShipping = couponFreeShip ? 0 : shippingCost
+  const displayTax = displaySubtotal * taxRate
+  const displayTotal = displaySubtotal + displayShipping + displayTax
 
   // Format digital items to match the structure expected by PayPal
   const formattedDigitalItems = digitalItems.map((item) => ({
@@ -138,12 +166,7 @@ export default function CheckoutPage() {
   console.log("=== END DEBUG ===")
 
   // ALL EFFECT HOOKS SECOND
-  // Redirect if not authenticated
-  useEffect(() => {
-    if (!loading && !user) {
-      router.push("/auth/login?redirect=checkout")
-    }
-  }, [loading, user, router])
+  // Guest checkout supported; no redirect
 
   useEffect(() => {
     track("checkout_start", { items: items.length + digitalItems.length, subtotal: subtotal + digitalSubtotal })
@@ -239,9 +262,35 @@ export default function CheckoutPage() {
         lastName: profile.last_name || prev.lastName,
         email: profile.email || prev.email,
         phone: (profile as any)?.phone || prev.phone,
+        address: (profile as any)?.address?.address || prev.address,
+        city: (profile as any)?.address?.city || prev.city,
+        state: (profile as any)?.address?.state || prev.state,
+        zipCode: (profile as any)?.address?.zipCode || prev.zipCode,
+        country: (profile as any)?.address?.country || prev.country,
       }))
+      if ((profile as any)?.address) setUseSavedAddress(true)
     }
   }, [profile])
+
+  // Also prefill from logged-in user if profile email was not set
+  useEffect(() => {
+    if (user?.email) {
+      setBillingInfo((prev) => ({ ...prev, email: prev.email || user.email! }))
+    }
+  }, [user?.email])
+
+  useEffect(() => {
+    if (useSavedAddress && profile) {
+      setBillingInfo((prev) => ({
+        ...prev,
+        address: (profile as any)?.address?.address || prev.address,
+        city: (profile as any)?.address?.city || prev.city,
+        state: (profile as any)?.address?.state || prev.state,
+        zipCode: (profile as any)?.address?.zipCode || prev.zipCode,
+        country: (profile as any)?.address?.country || prev.country,
+      }))
+    }
+  }, [useSavedAddress, profile])
 
   // Update shipping info when billing info changes and sameAsBilling is true
   useEffect(() => {
@@ -277,13 +326,11 @@ export default function CheckoutPage() {
   }
 
   const validateForm = () => {
-    if (!user) {
+    if (!user && !isGuestCheckout) {
       toast({
-        title: t("checkout.toast.authRequiredTitle"),
-        description: t("checkout.toast.authRequiredDesc"),
-        variant: "destructive",
+        title: t("checkout.toast.authOptionalTitle"),
+        description: t("checkout.toast.authOptionalDesc"),
       })
-      router.push("/auth/login?redirect=checkout")
       return false
     }
 
@@ -325,8 +372,7 @@ export default function CheckoutPage() {
       !billingInfo.phone ||
       !billingInfo.address ||
       !billingInfo.city ||
-      !billingInfo.state ||
-      !billingInfo.zipCode
+      !billingInfo.state
     ) {
       toast({
         title: t("checkout.toast.missingInfoTitle"),
@@ -344,12 +390,20 @@ export default function CheckoutPage() {
         !shippingInfo.phone ||
         !shippingInfo.address ||
         !shippingInfo.city ||
-        !shippingInfo.state ||
-        !shippingInfo.zipCode)
+        !shippingInfo.state)
     ) {
       toast({
         title: t("checkout.toast.missingInfoTitle"),
         description: t("checkout.toast.missingInfoDesc"),
+        variant: "destructive",
+      })
+      return false
+    }
+
+    if (isGuestCheckout && digitalItems.length > 0) {
+      toast({
+        title: t("checkout.toast.loginRequiredDigitalTitle"),
+        description: t("checkout.toast.loginRequiredDigitalDesc"),
         variant: "destructive",
       })
       return false
@@ -371,26 +425,132 @@ export default function CheckoutPage() {
       // For digital-only orders, add a special note
       const orderNotes = isDigitalOnly ? (notes ? `${notes} [DIGITAL DOWNLOAD]` : "[DIGITAL DOWNLOAD]") : notes
 
-      const orderData = {
-        user_id: user?.id || '',
-        email: billingInfo.email,
-        order_number: `ORD-${Date.now()}`,
-        status: "pending",
-        subtotal: combinedSubtotal,
-        tax: combinedTaxAmount,
-        shipping: shippingCost,
-        discount: 0,
-        total: combinedTotal,
-        shipping_method: shippingMethod, // Now we can use "download" directly
-        payment_method: paymentMethod,
-        billing_address: billingInfo,
-        shipping_address: sameAsBilling ? billingInfo : shippingInfo,
-        notes: orderNotes,
-        currency: "USD",
+      const withDefaults = (addr: any) => ({
+        ...addr,
+        zipCode: addr?.zipCode && addr.zipCode.trim() !== "" ? addr.zipCode : "1101",
+        country: addr?.country && addr.country.trim() !== "" ? addr.country : "El Salvador",
+      })
+
+      if (paymentMethod === "wompi") {
+        const { data: sessionData } = await supabase.auth.getSession()
+        const accessToken = sessionData.session?.access_token || null
+
+        // Optionally persist address to account (non-blocking)
+        try {
+          if (saveAddressToAccount && accessToken) {
+            await fetch('/api/user/address', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+              body: JSON.stringify({ phone: billingInfo.phone, address: withDefaults(billingInfo) })
+            })
+          }
+        } catch {}
+
+        const cartItemsForSession = items.map((item) => {
+          const c: any = (item as any).customizations || {}
+          const uploaded = c?.uploadedFiles?.[0] || null
+          return {
+            product_id: typeof item.productId === "string" ? item.productId : null,
+            material_type: c?.material_type || c?.specifications?.material || null,
+            quantity: item.quantity || 1,
+            price: item.price || 0,
+            uploaded_file_id: uploaded?.uploaded_file_id || c?.uploaded_file_id || null,
+            file_url: uploaded?.file_url || c?.design_file_url || c?.designUrl || null,
+          }
+        })
+
+        const createSessionRes = await fetch("/api/checkout-sessions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
+          body: JSON.stringify({
+            user_id: user?.id ?? null,
+            email: user?.email || billingInfo.email || null,
+            cart_items: cartItemsForSession,
+            shipping_address: withDefaults(sameAsBilling ? billingInfo : shippingInfo),
+            billing_address: withDefaults(billingInfo),
+            subtotal: displaySubtotal,
+            tax: displayTax,
+            shipping: displayShipping,
+            total: displayTotal,
+            discount: couponDiscount,
+            coupon_code: couponCode || null,
+            payment_method: "wompi",
+            shipping_method: shippingMethod,
+            notes: orderNotes,
+          }),
+        })
+        if (!createSessionRes.ok) {
+          const err = await createSessionRes.json().catch(() => ({}))
+          throw new Error(err?.error || "Failed to create checkout session")
+        }
+        const { checkout_session } = await createSessionRes.json()
+        setCurrentCheckoutReference(checkout_session.reference)
+        setShowWompiModal(true)
+        return
       }
 
-      const order = await createOrder(orderData)
-      track("order_created", { orderId: order.id, total: combinedTotal, method: paymentMethod })
+        const orderData = {
+        user_id: user?.id ?? null,
+        email: user?.email || billingInfo.email,
+        order_number: `ORD-${Date.now()}`,
+        status: "pending",
+          subtotal: displaySubtotal,
+          tax: displayTax,
+          shipping: displayShipping,
+          discount: couponDiscount,
+          total: displayTotal,
+        shipping_method: shippingMethod, // Now we can use "download" directly
+        payment_method: paymentMethod,
+        billing_address: withDefaults(billingInfo),
+        shipping_address: withDefaults(sameAsBilling ? billingInfo : shippingInfo),
+        notes: (() => {
+          const base = orderNotes || ""
+          if (!isCommercialCustomer) return base
+          const lines: string[] = []
+          if (fiscalMode === 'numbers') {
+            if (ivaNumber) lines.push(`IVA: ${ivaNumber}`)
+            if (cfNumber) lines.push(`Crédito Fiscal: ${cfNumber}`)
+          } else {
+            if (ivaFile) lines.push(`IVA documento: ${ivaFile.name}`)
+            if (cfFile) lines.push(`Crédito Fiscal documento: ${cfFile.name}`)
+          }
+          return [base, lines.length ? `Fiscal: ${lines.join(' | ')}` : ""].filter(Boolean).join("\n\n")
+        })(),
+        currency: "USD",
+          coupon_code: couponCode || null,
+      }
+
+      const { data: sessionData } = await supabase.auth.getSession()
+      const accessToken = sessionData.session?.access_token || null
+
+      // Optionally persist address to account (non-blocking)
+      try {
+        if (saveAddressToAccount && accessToken) {
+          await fetch('/api/user/address', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+            body: JSON.stringify({ phone: billingInfo.phone, address: withDefaults(billingInfo) })
+          })
+        }
+      } catch {}
+
+      const createRes = await fetch("/api/orders", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+        body: JSON.stringify(orderData),
+      })
+      if (!createRes.ok) {
+        const err = await createRes.json().catch(() => ({}))
+        throw new Error(err?.error || "Failed to create order")
+      }
+      const { order } = await createRes.json()
+      track("order_created", { orderId: order.id, total: displayTotal, method: paymentMethod })
       setCurrentOrder(order)
 
       // Create order items immediately (idempotent with payment confirm)
@@ -398,8 +558,21 @@ export default function CheckoutPage() {
         const physicalOrderItems = items.map((item) => {
           const customizedProductImage = (item as any).customizations?.customDesign?.customizedProductImage || (item as any).customizations?.customizedProductImage || null
           const aiPreview = (item as any).customizations?.aiDesign?.previewUrl || null
-          const previewUrl = (item as any).customizations?.preview_url || aiPreview || customizedProductImage || item.image || null
-          const downloadUrl = (item as any).customizations?.download_url || (item as any).customizations?.storage_url || customizedProductImage || aiPreview || item.image || null
+          const externalUrl = (item as any).customizations?.designUrl || null
+          const uploadedPublic =
+            (item as any).customizations?.uploadedFiles?.[0]?.file_url ||
+            (item as any).customizations?.uploadedFiles?.[0]?.publicUrl ||
+            null
+          const previewUrl = (item as any).customizations?.preview_url || aiPreview || customizedProductImage || uploadedPublic || item.image || null
+          const downloadUrl =
+            (item as any).customizations?.download_url ||
+            (item as any).customizations?.storage_url ||
+            externalUrl ||
+            uploadedPublic ||
+            customizedProductImage ||
+            aiPreview ||
+            item.image ||
+            null
           const designId = (item as any).designId || (item as any).customizations?.design_id || undefined
           return {
             order_id: order.id,
@@ -419,9 +592,13 @@ export default function CheckoutPage() {
           }
         })
         for (const oi of physicalOrderItems) {
-          await fetch(`/api/orders/${order.id}/items`, {
+          const r = await fetch(`/api/orders/${order.id}/items`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(oi)
           })
+          if (!r.ok) {
+            const err = await r.json().catch(() => ({}))
+            console.warn("Order item insert failed:", err)
+          }
         }
 
         const digitalOrderItems = digitalItems.map((d) => ({
@@ -441,21 +618,55 @@ export default function CheckoutPage() {
           print_ready_file_url: null,
         }))
         for (const oi of digitalOrderItems) {
-          await fetch(`/api/orders/${order.id}/items`, {
+          const r = await fetch(`/api/orders/${order.id}/items`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(oi)
           })
+          if (!r.ok) {
+            const err = await r.json().catch(() => ({}))
+            console.warn("Digital order item insert failed:", err)
+          }
+        }
+        // Commercial fiscal files: upload to Supabase and attach as zero-price order items
+        if (isCommercialCustomer && fiscalMode === 'upload') {
+          const bearer = accessToken || null
+          const uploadAndAttach = async (file: File | null, label: string) => {
+            if (!file) return
+            const fd = new FormData()
+            fd.append('file', file)
+            fd.append('file_type', 'fiscal')
+            const res = await fetch('/api/order-files/upload', { method: 'POST', headers: bearer ? { Authorization: `Bearer ${bearer}` } : undefined, body: fd })
+            if (!res.ok) {
+              console.warn('Fiscal upload failed')
+              return
+            }
+            const { orderFile } = await res.json().catch(() => ({ orderFile: null }))
+            const publicUrl = orderFile?.publicUrl || null
+            const uploadedId = orderFile?.id || null
+            const uploadedPath = orderFile?.path || null
+            const customizations: any = { type: 'fiscal' }
+            if (uploadedId) customizations.uploadedFiles = [{ id: uploadedId, path: uploadedPath, publicUrl }]
+            const payload = {
+              name: label,
+              price: 0,
+              quantity: 1,
+              design_file_url: publicUrl,
+              print_ready_file_url: publicUrl,
+              customizations,
+            }
+            const r = await fetch(`/api/orders/${order.id}/items`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+            if (!r.ok) {
+              const err = await r.json().catch(() => ({}))
+              console.warn('Fiscal order item insert failed:', err)
+            }
+          }
+          await uploadAndAttach(ivaFile, language === 'es' ? 'Documento IVA' : 'IVA Document')
+          await uploadAndAttach(cfFile, language === 'es' ? 'Documento Crédito Fiscal' : 'Credit Fiscal Document')
         }
       } catch (e) {
         console.warn('Order items creation failed or partially succeeded:', e)
       }
 
-      try {
-        await fetch("/api/email/admin/new-order", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ order }),
-        })
-      } catch (_) {}
+      // Admin/customer emails are sent only after successful payment confirmation
 
       if (paymentMethod === "wompi") {
         setShowWompiModal(true)
@@ -506,8 +717,12 @@ export default function CheckoutPage() {
           cartItems: items.map((item) => {
             const customizedProductImage = (item as any).customizations?.customDesign?.customizedProductImage || (item as any).customizations?.customizedProductImage || null
             const aiPreview = (item as any).customizations?.aiDesign?.previewUrl || null
-            const previewUrl = (item as any).customizations?.preview_url || aiPreview || customizedProductImage || item.image || null
-            const downloadUrl = (item as any).customizations?.download_url || (item as any).customizations?.storage_url || customizedProductImage || aiPreview || item.image || null
+            const uploadedPublic =
+              (item as any).customizations?.uploadedFiles?.[0]?.file_url ||
+              (item as any).customizations?.uploadedFiles?.[0]?.publicUrl ||
+              null
+            const previewUrl = (item as any).customizations?.preview_url || aiPreview || customizedProductImage || uploadedPublic || item.image || null
+            const downloadUrl = (item as any).customizations?.download_url || (item as any).customizations?.storage_url || uploadedPublic || customizedProductImage || aiPreview || item.image || null
             const designId = (item as any).designId || (item as any).customizations?.design_id || undefined
             return {
               ...item,
@@ -599,96 +814,19 @@ export default function CheckoutPage() {
 
   const handleWompiSuccess = async (transactionId: string) => {
     try {
-      // Extract digital product IDs from digital cart items
-      const digitalProductIds = digitalItems.map((item) => item.productId || item.designId).filter(Boolean)
-
-      console.log("Wompi payment successful, confirming with digital products:", digitalProductIds)
-
-      // Call payment confirmation API
-      const confirmResponse = await fetch("/api/payments/confirm", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          orderId: currentOrder.id,
-          transactionId,
-          paymentMethod: "wompi",
-          paymentStatus: "completed",
-          cartItems: items.map((item) => {
-            const customizedProductImage = (item as any).customizations?.customDesign?.customizedProductImage || (item as any).customizations?.customizedProductImage || null
-            const aiPreview = (item as any).customizations?.aiDesign?.previewUrl || null
-            const previewUrl = (item as any).customizations?.preview_url || aiPreview || customizedProductImage || item.image || null
-            const downloadUrl = (item as any).customizations?.download_url || (item as any).customizations?.storage_url || customizedProductImage || aiPreview || item.image || null
-            const designId = (item as any).designId || (item as any).customizations?.design_id || undefined
-            return {
-              ...item,
-              designId,
-              productImage: item.image || null,
-              customizedProductImage,
-              design_image_url: previewUrl,
-              design_file_url: downloadUrl,
-              storageUrl: (item as any).customizations?.storage_url || null,
-              preview_url: previewUrl,
-              download_url: downloadUrl,
-            }
-          }),
-          digitalCartItems: digitalItems.map((item) => ({
-            ...item,
-            productImage: null, // Digital items don't have base product images
-          })),
-          customerEmail: billingInfo.email || user?.email,
-          shippingAddress: sameAsBilling ? billingInfo : shippingInfo,
-          notes: notes,
-          shippingMethod: shippingMethod,
-          total: combinedTotal,
-          subtotal: combinedSubtotal,
-          tax: combinedTaxAmount,
-          shipping: shippingCost,
-          userId: user?.id,
-        }),
-      })
-
-      if (!confirmResponse.ok) {
-        const errorData = await confirmResponse
-          .json()
-          .catch(() => ({ error: "Failed to parse error response from API" }))
-        console.error("Payment confirmation failed. API Response:", errorData)
+      if (!currentCheckoutReference) throw new Error("Missing checkout reference")
+      clearCart()
+      clearDigitalCart()
+      router.push(
+        `/payment-complete?reference=${encodeURIComponent(currentCheckoutReference)}&status=success&type=wompi&transaction=${encodeURIComponent(transactionId)}`,
+      )
+    } catch (error) {
+      console.error("Wompi post-payment error:", error)
       toast({
         title: t("payment.error.title"),
-        description: errorData.error || t("payment.error.processingFailed"),
+        description: error instanceof Error ? error.message : t("payment.error.processingFailed"),
         variant: "destructive",
       })
-        // Similar to PayPal, consider the flow on failure.
-        // Original code proceeds to clear cart and redirect.
-        clearCart()
-        clearDigitalCart()
-        router.push(
-          `/orders/${currentOrder.id}/confirmation?status=success&transaction=${transactionId}&confirm_failed=true`,
-        )
-        return // Stop further execution
-      }
-      // If confirmResponse.ok, proceed with success logic
-      const confirmationData = await confirmResponse.json()
-      console.log("Payment confirmation successful. API Response:", confirmationData)
-
-      toast({
-        title: t("payment.success.title"),
-        description: t("payment.3ds.success.message"),
-      })
-      clearCart()
-      clearDigitalCart()
-      router.push(`/orders/${currentOrder.id}/confirmation?status=success&transaction=${transactionId}`)
-    } catch (error) {
-      console.error("Error in payment confirmation:", error)
-      // Still redirect to success page even if confirmation fails
-      toast({
-        title: t("payment.success.title"),
-        description: t("payment.3ds.success.message"),
-      })
-      clearCart()
-      clearDigitalCart()
-      router.push(`/orders/${currentOrder.id}/confirmation?status=success&transaction=${transactionId}`)
     }
   }
 
@@ -716,15 +854,7 @@ export default function CheckoutPage() {
     )
   }
 
-  if (!user) {
-    return (
-      <div className="min-h-screen bg-gray-50 py-12">
-        <div className="container mx-auto px-4 text-center">
-          <p>Redirecting to login...</p>
-        </div>
-      </div>
-    )
-  }
+  // Allow guest checkout; no redirect block here
 
   const hasItems = items.length > 0 || digitalItems.length > 0
   console.log("Has items check:", hasItems, "items.length:", items.length, "digitalItems.length:", digitalItems.length)
@@ -746,6 +876,21 @@ export default function CheckoutPage() {
   return (
     <div className="min-h-screen bg-gray-50 py-12">
       <div className="container mx-auto px-4">
+        {!user && !isGuestCheckout && (
+          <Alert className="mb-6">
+            <AlertDescription className="flex items-center justify-between gap-3">
+              <span>{t("checkout.authPromptMessage")}</span>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => router.push("/auth/login?redirect=checkout")}>
+                  {t("orders.authRequiredDesc") /* reuse safe existing key */}
+                </Button>
+                <Button className="bg-red-600 hover:bg-red-700 text-white" onClick={() => setIsGuestCheckout(true)}>
+                  {t("checkout.continueAsGuest")}
+                </Button>
+              </div>
+            </AlertDescription>
+          </Alert>
+        )}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">{t("checkout.title")}</h1>
           <p className="text-gray-600">{t("checkout.subtitle")}</p>
@@ -846,6 +991,7 @@ export default function CheckoutPage() {
                         name="email"
                         type="email"
                         value={billingInfo.email}
+                        placeholder={user?.email || "you@example.com"}
                         onChange={handleBillingInfoChange}
                         required
                       />
@@ -876,28 +1022,85 @@ export default function CheckoutPage() {
 
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="city">{t("checkout.city")}</Label>
-                      <Input
-                        id="city"
-                        name="city"
-                        value={billingInfo.city}
-                        onChange={handleBillingInfoChange}
-                        required
-                      />
+                      <Label htmlFor="country">{t("checkout.country")}</Label>
+                      <Select
+                        value={billingInfo.country}
+                        onValueChange={(value) => {
+                          const selected = countriesData.countries.find((c: any) => c.nombre === value || c.id === value)
+                          const firstRegion = selected?.territorios?.[0]?.nombre || billingInfo.state
+                          setBillingInfo((prev) => ({
+                            ...prev,
+                            country: selected?.nombre || value,
+                            state: firstRegion,
+                            city: prev.city,
+                          }))
+                        }}
+                      >
+                        <SelectTrigger id="country">
+                          <SelectValue placeholder={t("checkout.country")} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {countriesData.countries.map((c: any) => (
+                            <SelectItem key={c.id} value={c.nombre}>
+                              {c.nombre}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="state">{t("checkout.state")}</Label>
-                      <Input
-                        id="state"
-                        name="state"
+                      <Select
                         value={billingInfo.state}
-                        onChange={handleBillingInfoChange}
-                        required
-                      />
+                        onValueChange={(value) => {
+                          setBillingInfo((prev) => ({
+                            ...prev,
+                            state: value,
+                          }))
+                        }}
+                      >
+                        <SelectTrigger id="state">
+                          <SelectValue placeholder={t("checkout.state")} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(countriesData.countries.find((c: any) => c.nombre === billingInfo.country)?.territorios || []).map((r: any) => (
+                            <SelectItem key={r.id} value={r.nombre}>
+                              {r.nombre}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
-
                   <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="city">{t("checkout.city")}</Label>
+                      {billingInfo.country === "El Salvador" ? (
+                        <Select
+                          value={billingInfo.city}
+                          onValueChange={(value) => setBillingInfo((prev) => ({ ...prev, city: value }))}
+                        >
+                          <SelectTrigger id="city">
+                            <SelectValue placeholder={t("checkout.city")} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {(EL_SALVADOR_LOCATIONS[billingInfo.state] || []).map((opt) => (
+                              <SelectItem key={opt} value={opt}>
+                                {opt}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Input
+                          id="city"
+                          name="city"
+                          value={billingInfo.city}
+                          onChange={handleBillingInfoChange}
+                          required
+                        />
+                      )}
+                    </div>
                     <div className="space-y-2">
                       <Label htmlFor="zipCode">{t("checkout.zipCode")}</Label>
                       <Input
@@ -905,20 +1108,91 @@ export default function CheckoutPage() {
                         name="zipCode"
                         value={billingInfo.zipCode}
                         onChange={handleBillingInfoChange}
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="country">{t("checkout.country")}</Label>
-                      <Input
-                        id="country"
-                        name="country"
-                        value={billingInfo.country}
-                        onChange={handleBillingInfoChange}
-                        required
+                        
                       />
                     </div>
                   </div>
+
+                  
+                </CardContent>
+              </Card>
+
+              {/* Fiscal Information (Commercial customers) */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>{t("checkout.fiscalInfo.title")}</CardTitle>
+                  <CardDescription>{t("checkout.fiscalInfo.description")}</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <Checkbox id="isCommercial" checked={isCommercialCustomer} onCheckedChange={(v) => setIsCommercialCustomer(!!v)} />
+                    <Label htmlFor="isCommercial" className="font-normal text-sm">{t("checkout.fiscalInfo.commercialToggle")}</Label>
+                  </div>
+                  {isCommercialCustomer && (
+                    <>
+                      <RadioGroup value={fiscalMode} onValueChange={(v) => setFiscalMode(v as any)} className="flex gap-4">
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="numbers" id="fm-numbers" />
+                          <Label htmlFor="fm-numbers">{t("checkout.fiscalInfo.modeNumbers")}</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="upload" id="fm-upload" />
+                          <Label htmlFor="fm-upload">{t("checkout.fiscalInfo.modeUpload")}</Label>
+                        </div>
+                      </RadioGroup>
+
+                      {fiscalMode === 'numbers' ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <Label htmlFor="ivaNumber">{t("checkout.fiscalInfo.ivaNumber")}</Label>
+                            <Input id="ivaNumber" value={ivaNumber} onChange={(e) => setIvaNumber(e.target.value)} placeholder={t("checkout.fiscalInfo.ivaPlaceholder")} />
+                          </div>
+                          <div>
+                            <Label htmlFor="cfNumber">{t("checkout.fiscalInfo.cfNumber")}</Label>
+                            <Input id="cfNumber" value={cfNumber} onChange={(e) => setCfNumber(e.target.value)} placeholder={t("checkout.fiscalInfo.cfPlaceholder")} />
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <Label htmlFor="ivaFile">{t("checkout.fiscalInfo.ivaUpload")}</Label>
+                            <input
+                              id="ivaFile"
+                              ref={ivaInputRef}
+                              type="file"
+                              accept="image/*,application/pdf"
+                              className="hidden"
+                              onChange={(e) => setIvaFile(e.target.files?.[0] || null)}
+                            />
+                            <div className="flex items-center gap-2">
+                              <Button type="button" className="bg-[#8B0000] hover:bg-[#6B0000] text-white" onClick={() => ivaInputRef.current?.click()}>
+                                {language === 'es' ? 'Seleccionar archivo' : 'Choose File'}
+                              </Button>
+                              {ivaFile && <p className="text-xs text-gray-600">{ivaFile.name}</p>}
+                            </div>
+                          </div>
+                          <div>
+                            <Label htmlFor="cfFile">{t("checkout.fiscalInfo.cfUpload")}</Label>
+                            <input
+                              id="cfFile"
+                              ref={cfInputRef}
+                              type="file"
+                              accept="image/*,application/pdf"
+                              className="hidden"
+                              onChange={(e) => setCfFile(e.target.files?.[0] || null)}
+                            />
+                            <div className="flex items-center gap-2">
+                              <Button type="button" className="bg-[#8B0000] hover:bg-[#6B0000] text-white" onClick={() => cfInputRef.current?.click()}>
+                                {language === 'es' ? 'Seleccionar archivo' : 'Choose File'}
+                              </Button>
+                              {cfFile && <p className="text-xs text-gray-600">{cfFile.name}</p>}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      <p className="text-xs text-gray-500">{t("checkout.fiscalInfo.note")}</p>
+                    </>
+                  )}
                 </CardContent>
               </Card>
 
@@ -991,23 +1265,92 @@ export default function CheckoutPage() {
 
                         <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-2">
-                            <Label htmlFor="shippingCity">{t("checkout.city")}</Label>
-                            <Input
-                              id="shippingCity"
-                              name="city"
-                              value={shippingInfo.city}
-                              onChange={handleShippingInfoChange}
-                              required
-                            />
+                            <Label htmlFor="shippingCountry">{t("checkout.country")}</Label>
+                            <Select
+                              value={shippingInfo.country}
+                              onValueChange={(value) => {
+                                const selected = countriesData.countries.find((c: any) => c.nombre === value || c.id === value)
+                                const firstRegion = selected?.territorios?.[0]?.nombre || shippingInfo.state
+                                setShippingInfo((prev) => ({
+                                  ...prev,
+                                  country: selected?.nombre || value,
+                                  state: firstRegion,
+                                }))
+                              }}
+                            >
+                              <SelectTrigger id="shippingCountry">
+                                <SelectValue placeholder={t("checkout.country")} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {countriesData.countries.map((c: any) => (
+                                  <SelectItem key={c.id} value={c.nombre}>
+                                    {c.nombre}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                           </div>
                           <div className="space-y-2">
                             <Label htmlFor="shippingState">{t("checkout.state")}</Label>
-                            <Input
-                              id="shippingState"
-                              name="state"
+                            <Select
                               value={shippingInfo.state}
+                              onValueChange={(value) => {
+                                setShippingInfo((prev) => ({
+                                  ...prev,
+                                  state: value,
+                                }))
+                              }}
+                            >
+                              <SelectTrigger id="shippingState">
+                                <SelectValue placeholder={t("checkout.state")} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {(countriesData.countries.find((c: any) => c.nombre === shippingInfo.country)?.territorios || []).map((r: any) => (
+                                  <SelectItem key={r.id} value={r.nombre}>
+                                    {r.nombre}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="shippingCity">{t("checkout.city")}</Label>
+                            {shippingInfo.country === "El Salvador" ? (
+                              <Select
+                                value={shippingInfo.city}
+                                onValueChange={(value) => setShippingInfo((prev) => ({ ...prev, city: value }))}
+                              >
+                                <SelectTrigger id="shippingCity">
+                                  <SelectValue placeholder={t("checkout.city")} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {(EL_SALVADOR_LOCATIONS[shippingInfo.state] || []).map((opt) => (
+                                    <SelectItem key={opt} value={opt}>
+                                      {opt}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            ) : (
+                              <Input
+                                id="shippingCity"
+                                name="city"
+                                value={shippingInfo.city}
+                                onChange={handleShippingInfoChange}
+                                required
+                              />
+                            )}
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="shippingZipCode">{t("checkout.zipCode")}</Label>
+                            <Input
+                              id="shippingZipCode"
+                              name="zipCode"
+                              value={shippingInfo.zipCode}
                               onChange={handleShippingInfoChange}
-                              required
+                              
                             />
                           </div>
                         </div>
@@ -1020,7 +1363,7 @@ export default function CheckoutPage() {
                               name="zipCode"
                               value={shippingInfo.zipCode}
                               onChange={handleShippingInfoChange}
-                              required
+                              
                             />
                           </div>
                           <div className="space-y-2">
@@ -1030,7 +1373,7 @@ export default function CheckoutPage() {
                               name="country"
                               value={shippingInfo.country}
                               onChange={handleShippingInfoChange}
-                              required
+                              
                             />
                           </div>
                         </div>
@@ -1181,18 +1524,81 @@ export default function CheckoutPage() {
 
                   <Separator />
 
+                  {/* Address preferences */}
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Checkbox id="useSavedAddress" checked={useSavedAddress} onCheckedChange={(v) => setUseSavedAddress(!!v)} />
+                      <Label htmlFor="useSavedAddress" className="font-normal text-sm">{t("checkout.useSavedAddress")}</Label>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Checkbox id="saveAddr" checked={saveAddressToAccount} onCheckedChange={(v) => setSaveAddressToAccount(!!v)} />
+                      <Label htmlFor="saveAddr" className="font-normal text-sm">{t("checkout.saveAddressToAccount")}</Label>
+                    </div>
+                  </div>
+
+                  {/* Coupon apply */}
+                  <div className="space-y-2">
+                    <Label>{t("checkout.coupon.label")}</Label>
+                    <div className="flex gap-2">
+                      <Input value={couponCode} onChange={(e) => setCouponCode(e.target.value)} placeholder={t("checkout.coupon.placeholder")} />
+                      <Button
+                        variant="outline"
+                        disabled={couponApplying || !couponCode.trim()}
+                        onClick={async () => {
+                          setCouponApplying(true)
+                          setCouponError(null)
+                          try {
+                            const payload = {
+                              code: couponCode.trim(),
+                              cart: {
+                                subtotal: combinedSubtotal,
+                                items: [...items.map(i => ({ productId: i.productId || null, categoryId: null, quantity: i.quantity, unitPrice: i.price })), ...digitalItems.map(d => ({ productId: d.productId || d.designId || null, categoryId: null, quantity: 1, unitPrice: d.finalPrice || d.basePrice || 0 }))]
+                              },
+                              userId: user?.id || null,
+                            }
+                            const res = await fetch('/api/checkout/apply-coupon', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+                            const data = await res.json()
+                            if (!res.ok) throw new Error(data.error || 'Failed to apply coupon')
+                            setCouponDiscount(Number(data.discount || 0))
+                            setCouponFreeShip(!!data.freeShipping)
+                          } catch (e: any) {
+                            setCouponDiscount(0)
+                            setCouponFreeShip(false)
+                            setCouponError(e.message || String(e))
+                          } finally {
+                            setCouponApplying(false)
+                          }
+                        }}
+                      >
+                        {couponApplying ? t("checkout.coupon.applying") : t("checkout.coupon.apply")}
+                      </Button>
+                    </div>
+                    {couponError && <p className="text-sm text-red-600">{couponError}</p>}
+                    {couponDiscount > 0 && !couponError && (
+                      <p className="text-sm text-green-700">{t("checkout.coupon.appliedPrefix")}: −${couponDiscount.toFixed(2)}{couponFreeShip ? t("checkout.coupon.freeShippingSuffix") : ''}</p>
+                    )}
+                  </div>
+
+                  <Separator />
+
                   <div className="space-y-2">
                     <div className="flex justify-between">
                       <span>{t("checkout.subtotalLabel")}</span>
-                      <span>${combinedSubtotal.toFixed(2)}</span>
+                      <span>${displaySubtotal.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span>{t("checkout.shippingLabel")}</span>
-                      <span>${shippingCost.toFixed(2)}</span>
+                      <span>${displayShipping.toFixed(2)}</span>
                     </div>
+                    {couponDiscount > 0 && (
+                      <div className="flex justify-between text-green-700">
+                        <span>{t("checkout.coupon.discountRow")}</span>
+                        <span>−${couponDiscount.toFixed(2)}</span>
+                      </div>
+                    )}
                     <div className="flex justify-between">
                       <span>{t("checkout.taxLabel")}</span>
-                      <span>${combinedTaxAmount.toFixed(2)}</span>
+                      <span>${displayTax.toFixed(2)}</span>
                     </div>
                   </div>
 
@@ -1200,7 +1606,7 @@ export default function CheckoutPage() {
 
                   <div className="flex justify-between font-bold text-lg">
                     <span>{t("checkout.totalLabel")}</span>
-                    <span>${combinedTotal.toFixed(2)}</span>
+                    <span>${displayTotal.toFixed(2)}</span>
                   </div>
 
                   <div className="pt-4">
@@ -1226,7 +1632,7 @@ export default function CheckoutPage() {
                           {t("common.loading")}
                         </>
                       ) : (
-                        `${t("checkout.completeOrder")} • $${combinedTotal.toFixed(2)}`
+                        `${t("checkout.completeOrder")} • $${displayTotal.toFixed(2)}`
                       )}
                     </Button>
                   </div>
@@ -1237,16 +1643,17 @@ export default function CheckoutPage() {
         )}
 
         {/* Wompi Payment Modal */}
-        {showWompiModal && currentOrder && (
+        {showWompiModal && currentCheckoutReference && (
           <WompiPaymentModal
             isOpen={showWompiModal}
             onClose={() => setShowWompiModal(false)}
             orderData={{
-              total: combinedTotal,
+              total: displayTotal,
               billingInfo,
               shippingInfo: sameAsBilling ? billingInfo : shippingInfo,
               items: combinedItems,
-              orderId: currentOrder.id,
+              reference: currentCheckoutReference,
+              userId: user?.id || undefined,
             }}
             onSuccess={handleWompiSuccess}
             onError={handleWompiError}

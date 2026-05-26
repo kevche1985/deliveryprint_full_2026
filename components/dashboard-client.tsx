@@ -11,7 +11,7 @@ import Link from "next/link"
 import { motion } from "framer-motion"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
-import { getUserOrders } from "@/lib/database"
+import { useLanguage } from "@/lib/language-context"
 import type { Order } from "@/lib/database"
 import { toast } from "@/hooks/use-toast"
 import { supabase } from "@/lib/supabase"
@@ -21,12 +21,14 @@ import { getUserPurchasedDigitalProducts, getUserUnpurchasedDigitalProducts } fr
 
 export default function DashboardClient() {
   const { user, profile, loading: authLoading } = useAuth()
+  const { t } = useLanguage()
   const router = useRouter()
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [purchasedDesigns, setPurchasedDesigns] = useState<any[]>([])
   const [unpurchasedDesigns, setUnpurchasedDesigns] = useState<any[]>([])
+  const [quotes, setQuotes] = useState<any[]>([])
   const [showUnpurchased, setShowUnpurchased] = useState(false)
   const [downloadingDesigns, setDownloadingDesigns] = useState<Record<string, boolean>>({})
   const [selectedFormats, setSelectedFormats] = useState<Record<string, string>>({})
@@ -61,13 +63,15 @@ export default function DashboardClient() {
         const payload = await resp.json()
         serverOrders = payload.orders || []
       }
-      const [purchased, unpurchased] = await Promise.all([
+      const [purchased, unpurchased, quotesData] = await Promise.all([
         getUserPurchasedDigitalProducts(user.id),
-        getUserUnpurchasedDigitalProducts(user.id)
+        getUserUnpurchasedDigitalProducts(user.id),
+        fetch(`/api/quotes?customer_id=${user.id}`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined }).then(r => r.json()).catch(() => ({ quotes: [] }))
       ])
       setOrders(serverOrders)
       setPurchasedDesigns(purchased)
       setUnpurchasedDesigns(unpurchased)
+      setQuotes(quotesData.quotes || [])
     } catch (err: any) {
       console.error('Error loading user data:', err)
       setError(err.message || 'Failed to load user data')
@@ -266,8 +270,8 @@ export default function DashboardClient() {
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">Welcome back, {profile?.first_name || user.email}!</h1>
-        <p className="text-gray-600">Manage your orders, designs, and account settings.</p>
+        <h1 className="text-3xl font-bold mb-2">{`${t("dashboard.welcomeBack")}, ${profile?.first_name || user.email}!`}</h1>
+        <p className="text-gray-600">{t("dashboard.manageSubtitle")}</p>
       </div>
       
       {error && (
@@ -279,17 +283,18 @@ export default function DashboardClient() {
       
       <Tabs defaultValue="orders" className="space-y-6">
         <TabsList>
-          <TabsTrigger value="orders">My Orders</TabsTrigger>
-          <TabsTrigger value="designs">My Designs</TabsTrigger>
-          <TabsTrigger value="digital">Digital Products</TabsTrigger>
-          <TabsTrigger value="account">Account</TabsTrigger>
+          <TabsTrigger value="orders">{t("dashboard.tabs.orders")}</TabsTrigger>
+          <TabsTrigger value="designs">{t("dashboard.tabs.designs")}</TabsTrigger>
+          <TabsTrigger value="digital">{t("dashboard.tabs.digital")}</TabsTrigger>
+          <TabsTrigger value="account">{t("dashboard.tabs.account")}</TabsTrigger>
+          <TabsTrigger value="quotes">{t("dashboard.tabs.quotes")}</TabsTrigger>
         </TabsList>
         
         <TabsContent value="orders">
           <Card>
             <CardHeader>
-              <CardTitle>Recent Orders</CardTitle>
-              <CardDescription>Track your recent print orders</CardDescription>
+              <CardTitle>{t("dashboard.recentOrders.title")}</CardTitle>
+              <CardDescription>{t("dashboard.recentOrders.subtitle")}</CardDescription>
             </CardHeader>
             <CardContent>
               {loading ? (
@@ -298,14 +303,14 @@ export default function DashboardClient() {
                 </div>
               ) : orders.length === 0 ? (
                 <div className="text-center py-8">
-                  <p className="text-gray-500 mb-4">No orders yet</p>
+                  <p className="text-gray-500 mb-4">{t("dashboard.recentOrders.noOrders")}</p>
                   <Button asChild>
-                    <Link href="/products">Start Shopping</Link>
+                    <Link href="/products">{t("dashboard.recentOrders.cta")}</Link>
                   </Button>
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {orders.map((order) => (
+                  {orders.slice(0, 5).map((order) => (
                     <div key={order.id} className="border rounded-lg p-4">
                       <div className="flex justify-between items-start">
                         <div>
@@ -327,7 +332,15 @@ export default function DashboardClient() {
                             <Eye className="h-4 w-4" />
                           </Link>
                         </Button>
-                        <Button variant="outline" className="h-8" onClick={() => { setDisputeOrderId(order.id); setDisputeProvider(order as any)?.payment_method; setShowDispute(true) }}>
+                        <Button
+                          variant="outline"
+                          className="h-8"
+                          onClick={() => {
+                            setDisputeOrderId(order.id)
+                            setDisputeProvider(((order as any)?.payment_method as any) || undefined)
+                            setShowDispute(true)
+                          }}
+                        >
                           Request Refund
                         </Button>
                       </div>
@@ -342,14 +355,14 @@ export default function DashboardClient() {
         <TabsContent value="designs">
           <Card>
             <CardHeader>
-              <CardTitle>My Designs</CardTitle>
-              <CardDescription>Your saved and created designs</CardDescription>
+              <CardTitle>{t("dashboard.designs.title")}</CardTitle>
+              <CardDescription>{t("dashboard.designs.subtitle")}</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="text-center py-8">
-                <p className="text-gray-500 mb-4">No designs yet</p>
+                <p className="text-gray-500 mb-4">{t("dashboard.designs.empty")}</p>
                 <Button asChild>
-                  <Link href="/ai-studio">Create Design</Link>
+                  <Link href="/ai-studio">{t("dashboard.designs.cta")}</Link>
                 </Button>
               </div>
             </CardContent>
@@ -359,24 +372,24 @@ export default function DashboardClient() {
         <TabsContent value="digital">
           <div className="space-y-6">
             <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-bold">Digital Products</h2>
+              <h2 className="text-2xl font-bold">{t("dashboard.digital.title")}</h2>
               <div className="flex gap-2">
-                <Button 
+                <Button
                   variant={!showUnpurchased ? "default" : "outline"}
                   onClick={() => setShowUnpurchased(false)}
                 >
-                  Purchased ({purchasedDesigns.length})
+                  {t("dashboard.digital.purchased")} ({purchasedDesigns.length})
                 </Button>
-                <Button 
+                <Button
                   variant={showUnpurchased ? "default" : "outline"}
                   onClick={() => setShowUnpurchased(true)}
                 >
-                  Unpurchased ({unpurchasedDesigns.length})
+                  {t("dashboard.digital.unpurchased")} ({unpurchasedDesigns.length})
                 </Button>
                 <Button asChild className="bg-purple-600 hover:bg-purple-700">
                   <Link href="/ai-studio">
                     <PlusCircle className="mr-2 h-4 w-4" />
-                    Create New
+                    {t("dashboard.digital.createNew")}
                   </Link>
                 </Button>
               </div>
@@ -413,7 +426,7 @@ export default function DashboardClient() {
                             {design.type.charAt(0).toUpperCase() + design.type.slice(1)}
                           </Badge>
                           <Badge className="absolute top-2 left-2 bg-amber-500">
-                            Unpurchased
+                            {t("dashboard.digital.badgeUnpurchased")}
                           </Badge>
                           {design?.metadata?.saved && (
                             <Badge className="absolute top-12 left-2 bg-green-600">Saved</Badge>
@@ -422,7 +435,7 @@ export default function DashboardClient() {
                         <CardContent className="p-4">
                           <h3 className="font-semibold mb-2">{design.name}</h3>
                           <p className="text-sm text-gray-500 mb-4">
-                            Created {new Date(design.created_at).toLocaleDateString()}
+                            {t("dashboard.digital.created")} {new Date(design.created_at).toLocaleDateString()}
                           </p>
                           <div className="space-y-2">
                             <div className="flex gap-2">
@@ -431,8 +444,8 @@ export default function DashboardClient() {
                                 onClick={() => handleSaveDesign(design)}
                                 className="flex-1"
                               >
-                                <Save className="mr-2 h-4 w-4" />
-                                Save
+                              <Save className="mr-2 h-4 w-4" />
+                              {t("dashboard.digital.save")}
                               </Button>
                               <Button
                                 variant="outline"
@@ -440,7 +453,7 @@ export default function DashboardClient() {
                                 className="flex-1"
                               >
                                 <Trash2 className="mr-2 h-4 w-4" />
-                                Delete
+                                {t("dashboard.digital.delete")}
                               </Button>
                             </div>
                             <Button
@@ -448,7 +461,7 @@ export default function DashboardClient() {
                               className="w-full bg-purple-600 hover:bg-purple-700"
                             >
                               <ShoppingCart className="mr-2 h-4 w-4" />
-                              Add to Cart - ${design.base_price || 4.99}
+                              {t("common.addToCart")} - ${design.base_price || 4.99}
                             </Button>
                           </div>
                         </CardContent>
@@ -488,7 +501,7 @@ export default function DashboardClient() {
                             {design.type.charAt(0).toUpperCase() + design.type.slice(1)}
                           </Badge>
                           <Badge className="absolute top-2 left-2 bg-green-500">
-                            Purchased
+                            {t("dashboard.digital.badgePurchased")}
                           </Badge>
                           {design?.metadata?.saved && (
                             <Badge className="absolute top-12 left-2 bg-green-600">Saved</Badge>
@@ -497,13 +510,13 @@ export default function DashboardClient() {
                         <CardContent className="p-4">
                           <h3 className="font-semibold mb-2">{design.name}</h3>
                           <p className="text-sm text-gray-500 mb-2">
-                            Created {new Date(design.created_at).toLocaleDateString()}
+                            {t("dashboard.digital.created")} {new Date(design.created_at).toLocaleDateString()}
                           </p>
                           
                           {/* Format Selection */}
                           <div className="mb-4">
                             <label className="block text-sm font-medium text-gray-700 mb-1">
-                              Download Format
+                              {t("dashboard.digital.downloadFormat")}
                             </label>
                             <select
                               value={selectedFormats[design.id] || 'PNG'}
@@ -528,10 +541,9 @@ export default function DashboardClient() {
                             ) : (
                               <Download className="mr-2 h-4 w-4" />
                             )}
-                            {downloadingDesigns[design.id] 
-                              ? 'Downloading...' 
-                              : `Download ${(selectedFormats[design.id] || 'PNG').toUpperCase()}`
-                            }
+                            {downloadingDesigns[design.id]
+                              ? t("common.loading")
+                              : `${t("dashboard.digital.downloadPrefix")} ${(selectedFormats[design.id] || 'PNG').toUpperCase()}`}
                           </Button>
                           <div className="mt-2 flex gap-2">
                             <Button
@@ -540,7 +552,7 @@ export default function DashboardClient() {
                               className="flex-1"
                             >
                               <Save className="mr-2 h-4 w-4" />
-                              Save
+                              {t("dashboard.digital.save")}
                             </Button>
                             <Button
                               variant="outline"
@@ -548,7 +560,7 @@ export default function DashboardClient() {
                               className="flex-1"
                             >
                               <Trash2 className="mr-2 h-4 w-4" />
-                              Delete
+                              {t("dashboard.digital.delete")}
                             </Button>
                           </div>
                         </CardContent>
@@ -560,30 +572,87 @@ export default function DashboardClient() {
             )}
           </div>
         </TabsContent>
+
+        <TabsContent value="quotes">
+          <Card>
+            <CardHeader>
+              <CardTitle>{t("dashboard.quotes.title")}</CardTitle>
+              <CardDescription>{t("dashboard.quotes.subtitle")}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {quotes.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-gray-500 mb-4">{t("dashboard.quotes.noQuotes")}</p>
+                  <Button asChild>
+                    <Link href="/quote">{t("dashboard.quotes.cta")}</Link>
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {quotes.slice(0, 10).map((q) => (
+                    <div key={q.id} className="border rounded p-4 flex justify-between items-start">
+                      <div>
+                        <h3 className="font-semibold">{q.quote_number || q.id}</h3>
+                        <p className="text-sm text-gray-600">{new Date(q.created_at).toLocaleDateString()}</p>
+                        <p className="text-sm text-gray-600 mt-1">{q.service_type}</p>
+                      </div>
+                      <Badge variant={q.status === 'approved' ? 'default' : 'secondary'}>{q.status}</Badge>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
         
         <TabsContent value="account">
           <Card>
             <CardHeader>
-              <CardTitle>Account Information</CardTitle>
-              <CardDescription>Manage your account details</CardDescription>
+              <CardTitle>{t("dashboard.account.title")}</CardTitle>
+              <CardDescription>{t("dashboard.account.subtitle")}</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
                 <div>
-                  <label className="text-sm font-medium">Email</label>
+                  <label className="text-sm font-medium">{t("dashboard.account.email")}</label>
                   <p className="text-sm text-gray-600">{user.email}</p>
                 </div>
                 {profile && (
                   <>
                     <div>
-                      <label className="text-sm font-medium">Name</label>
+                      <label className="text-sm font-medium">{t("dashboard.account.name")}</label>
                       <p className="text-sm text-gray-600">
                         {profile.first_name} {profile.last_name}
                       </p>
                     </div>
                     <div>
-                      <label className="text-sm font-medium">Role</label>
+                      <label className="text-sm font-medium">{t("dashboard.account.role")}</label>
                       <p className="text-sm text-gray-600">{profile.role}</p>
+                    </div>
+                    {(profile as any)?.phone && (
+                      <div>
+                        <label className="text-sm font-medium">{t("dashboard.account.phone")}</label>
+                        <p className="text-sm text-gray-600">{(profile as any).phone}</p>
+                      </div>
+                    )}
+                    {(profile as any)?.address && (
+                      <div>
+                        <label className="text-sm font-medium">{t("dashboard.account.address")}</label>
+                        <div className="text-sm text-gray-600">
+                          <p>{(profile as any).address?.address}</p>
+                          <p>
+                            {(profile as any).address?.city}
+                            {((profile as any).address?.state ? `, ${(profile as any).address?.state}` : '')}
+                            {((profile as any).address?.zipCode ? ` ${(profile as any).address?.zipCode}` : '')}
+                          </p>
+                          <p>{(profile as any).address?.country}</p>
+                        </div>
+                      </div>
+                    )}
+                    <div>
+                      <Button asChild variant="outline">
+                        <Link href="/account/settings">{t("dashboard.account.editAddress")}</Link>
+                      </Button>
                     </div>
                   </>
                 )}

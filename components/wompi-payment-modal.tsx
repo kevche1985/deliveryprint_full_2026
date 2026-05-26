@@ -7,18 +7,19 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent } from "@/components/ui/card"
-import { Loader2, CreditCard, Lock, Shield, Info, AlertCircle } from "lucide-react"
+import { Loader2, CreditCard, Lock, Shield, AlertCircle } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useLanguage } from "@/lib/language-context"
 import countriesData from "@/lib/countries-regions.json"
+import { supabase } from "@/lib/supabase"
 
 interface OrderData {
   total: number
   billingInfo: any
   shippingInfo: any
   items: any[]
-  orderId: string
+  reference: string
   userId?: string
 }
 
@@ -74,7 +75,11 @@ export default function WompiPaymentModal({ isOpen, onClose, orderData, onSucces
       if (billingCountry === "Canada") {
         setSelectedCountry("CA")
         setSelectedRegion("CA-ON") // Default to Ontario
-      } else if (billingCountry === "United States" || billingCountry === "USA") {
+      } else if (
+        billingCountry === "United States" ||
+        billingCountry === "USA" ||
+        (typeof billingCountry === "string" && billingCountry.includes("United States"))
+      ) {
         setSelectedCountry("US")
         setSelectedRegion("US-CA") // Default to California
       } else {
@@ -160,6 +165,7 @@ export default function WompiPaymentModal({ isOpen, onClose, orderData, onSucces
 
     try {
       // Prepare payment data for Wompi API
+      const roundToTwo = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100
       const paymentData = {
         tarjetaCreditoDebido: {
           numeroTarjeta: cardData.cardNumber.replace(/\s/g, ""),
@@ -167,7 +173,7 @@ export default function WompiPaymentModal({ isOpen, onClose, orderData, onSucces
           mesVencimiento: Number.parseInt(cardData.expiryMonth),
           anioVencimiento: Number.parseInt(cardData.expiryYear),
         },
-        monto: orderData.total,
+        monto: roundToTwo(orderData.total),
         nombre: orderData.billingInfo.firstName,
         apellido: orderData.billingInfo.lastName,
         email: orderData.billingInfo.email,
@@ -177,14 +183,14 @@ export default function WompiPaymentModal({ isOpen, onClose, orderData, onSucces
         idRegion: selectedRegion,
         codigoPostal: orderData.billingInfo.zipCode || "01101",
         idPais: selectedCountry,
-        urlRedirect: `${window.location.origin}/payment-complete?orderId=${orderData.orderId}&status=success`,
+        urlRedirect: `${window.location.origin}/payment-complete?reference=${encodeURIComponent(orderData.reference)}&status=success&type=wompi`,
         configuracion: {
           emailsNotificacion: orderData.billingInfo.email,
           telefonosNotificacion: orderData.billingInfo.phone || "70000000",
           notificarTransaccionCliente: true,
-          urlWebhook: `${window.location.origin}/api/payments/wompi/webhook`,
+          urlWebhook: `${window.location.origin}/api/webhooks/wompi`,
         },
-        idExterno: orderData.orderId,
+        idExterno: orderData.reference,
         datosAdicionales: {
           items: orderData.items,
           shippingInfo: orderData.shippingInfo,
@@ -192,6 +198,9 @@ export default function WompiPaymentModal({ isOpen, onClose, orderData, onSucces
       }
 
       console.log("💳 Sending payment request...")
+
+      const { data: sessionData } = await supabase.auth.getSession()
+      const accessToken = sessionData.session?.access_token || null
 
       // Add timeout protection for frontend request
       const controller = new AbortController()
@@ -204,6 +213,7 @@ export default function WompiPaymentModal({ isOpen, onClose, orderData, onSucces
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         },
         body: JSON.stringify(paymentData),
         signal: controller.signal,
@@ -235,7 +245,7 @@ export default function WompiPaymentModal({ isOpen, onClose, orderData, onSucces
           const threeDSUrl = new URL(responseData.data.urlCompletarPago3Ds)
           threeDSUrl.searchParams.set(
             "returnUrl",
-            `${window.location.origin}/payment-3ds?id=${responseData.data.idTransaccion}&orderId=${orderData.orderId}`,
+            `${window.location.origin}/payment-complete?reference=${encodeURIComponent(orderData.reference)}&status=success&type=wompi&idTransaccion=${responseData.data.idTransaccion}`,
           )
 
           // Close modal before redirect
@@ -247,40 +257,6 @@ export default function WompiPaymentModal({ isOpen, onClose, orderData, onSucces
           // Payment successful without 3DS
           console.log("✅ Payment successful!")
           const transactionId = responseData.data.idTransaccion
-
-          // Call payment confirmation API to update digital products
-          try {
-            const confirmResponse = await fetch("/api/payments/confirm", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                orderId: orderData.orderId,
-                transactionId: transactionId,
-                paymentMethod: "wompi",
-                cartItems: orderData.items.filter((item: any) => !item.digitalProductId),
-                digitalCartItems: orderData.items.filter(
-                  (item: any) =>
-                    item.digitalProductId ||
-                    (item.productId &&
-                      typeof item.productId === "string" &&
-                      (item.productId.startsWith("logo-") ||
-                        item.productId.startsWith("font-") ||
-                        item.productId.startsWith("image-")))
-                ),
-                userId: orderData.userId,
-              }),
-            })
-
-            if (!confirmResponse.ok) {
-              console.error("Failed to confirm payment for digital products")
-            } else {
-              console.log("Successfully confirmed payment and updated digital products")
-            }
-          } catch (confirmError) {
-            console.error("Error confirming payment:", confirmError)
-          }
 
           toast({
             title: t("payment.success.title"),
@@ -331,7 +307,6 @@ export default function WompiPaymentModal({ isOpen, onClose, orderData, onSucces
   }
 
   const cardType = getCardType(cardData.cardNumber)
-  const testScenario = getTestScenario(cardData.cvv)
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -344,16 +319,7 @@ export default function WompiPaymentModal({ isOpen, onClose, orderData, onSucces
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* Test Mode Alert - Based on Wompi Official Documentation */}
-          <Alert>
-            <Info className="h-4 w-4" />
-            <AlertDescription>
-              <strong>{t("payment.testMode.title")}:</strong> {t("payment.testMode.description")}
-              <br />• <strong>CVV "111"</strong> = {t("payment.testCard.declined")}
-              <br />• <strong>Any other CVV</strong> = {t("payment.testCard.othersSuccess")}
-              <br />• <em>Note: Use any valid card number for testing</em>
-            </AlertDescription>
-          </Alert>
+          {/* Test Mode helper removed per request */}
 
           {/* Security badges */}
           <div className="flex items-center justify-center gap-4 py-2 bg-gray-50 rounded-lg">
@@ -464,13 +430,7 @@ export default function WompiPaymentModal({ isOpen, onClose, orderData, onSucces
                 maxLength={4}
                 className={errors.cvv ? "border-red-500" : ""}
               />
-              {testScenario && (
-                <p
-                  className={`text-xs ${testScenario.type === "success" ? "text-green-600" : testScenario.type === "info" ? "text-blue-600" : "text-orange-600"}`}
-                >
-                  {testScenario.message}
-                </p>
-              )}
+              {/* Test scenario message removed per request */}
             </div>
           </div>
           {errors.expiry && <p className="text-sm text-red-500">{errors.expiry}</p>}

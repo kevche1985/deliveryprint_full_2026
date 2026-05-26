@@ -1,0 +1,38 @@
+export const EL_SALVADOR_LOCATIONS: Record<string, string[]> = {
+  Ahuachapan: ["Ahuachapan Centro", "Ahuachapan Norte", "Ahuachapan Sur"],
+  "Cabañas": ["Cabañas Este", "Cabañas Oeste"],
+  Chalatenango: ["Chalatenango Centro", "Chalatenango Norte", "Chalatenango Sur", "Embalse Cerron Grande"],
+  Cuscatlan: ["Cuscatlan Norte", "Cuscatlan Sur"],
+  "La Libertad": [
+    "La Libertad Centro",
+    "La Libertad Costa",
+    "La Libertad Este",
+    "La Libertad Norte",
+    "La Libertad Oeste",
+    "La Libertad Sur",
+  ],
+  "La Paz": ["La Paz Centro", "La Paz Este", "La Paz Oeste"],
+  "La Union": ["La Union Norte", "La Union Sur"],
+  Morazan: ["Morazan Norte", "Morazan Sur"],
+  "San Miguel": ["San Miguel Centro", "San Miguel Norte", "San Miguel Oeste"],
+  "San Salvador": [
+    "Lago de Llopango",
+    "San Salvador Centro",
+    "San Salvador Este",
+    "San Salvador Norte",
+    "San Salvador Oeste",
+    "San Salvador Sur",
+  ],
+  "San Vicente": ["San Vicente Norte", "San Vicente Sur"],
+  "Santa Ana": [
+    "Lago de Coatepeque",
+    "Lago de Guija",
+    "Santa Ana Centro",
+    "Santa Ana Este",
+    "Santa Ana Norte",
+    "Santa Ana Oeste",
+  ],
+  Sonsonate: ["Sonsonate Centro", "Sonsonate Este", "Sonsonate Norte", "Sonsonate Oeste"],
+  Usulutan: ["Usulutan Este", "Usulutan Norte", "Usulutan Oeste"],
+}
+
