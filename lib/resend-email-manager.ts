@@ -2,16 +2,31 @@ import { Resend } from 'resend'
 import { createClient } from '@supabase/supabase-js'
 import crypto from 'crypto'
 
-const resend = new Resend(process.env.RESEND_API_KEY!)
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+let resendInstance: Resend | null = null
+const getResend = () => {
+  if (resendInstance) return resendInstance
+  const apiKey = process.env.RESEND_API_KEY
+  if (!apiKey) return null
+  resendInstance = new Resend(apiKey)
+  return resendInstance
+}
 
-const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false,
-  },
-})
+let supabaseAdminInstance: ReturnType<typeof createClient> | null = null
+const getSupabaseAdmin = () => {
+  if (supabaseAdminInstance) return supabaseAdminInstance
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!supabaseUrl || !supabaseServiceKey) {
+    throw new Error('Missing Supabase configuration')
+  }
+  supabaseAdminInstance = createClient(supabaseUrl, supabaseServiceKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  })
+  return supabaseAdminInstance
+}
 
 interface EmailTemplate {
   template_key: string
@@ -20,6 +35,19 @@ interface EmailTemplate {
   html_template: string
   text_template?: string
   variables: string[]
+}
+
+interface EmailConfirmationTokenRow {
+  id: string
+  user_id: string
+  email: string
+  token: string
+  expires_at: string
+  used_at: string | null
+}
+
+interface UserProfileIdRow {
+  id: string
 }
 
 interface EmailData {
@@ -39,6 +67,11 @@ export class ResendEmailManager {
    */
   async sendEmail(emailData: EmailData): Promise<{ success: boolean; messageId?: string; error?: string }> {
     try {
+      const resend = getResend()
+      if (!resend) {
+        return { success: false, error: 'Missing RESEND_API_KEY' }
+      }
+
       const { data, error } = await resend.emails.send({
         from: emailData.from || `${this.fromName} <${this.fromEmail}>`,
         to: emailData.to,
@@ -65,6 +98,7 @@ export class ResendEmailManager {
    */
   async getTemplate(templateKey: string): Promise<EmailTemplate | null> {
     try {
+      const supabaseAdmin = getSupabaseAdmin()
       const { data, error } = await supabaseAdmin
         .from('email_templates')
         .select('*')
@@ -77,7 +111,7 @@ export class ResendEmailManager {
         return null
       }
 
-      return data as EmailTemplate
+      return data as unknown as EmailTemplate
     } catch (error) {
       console.error('Error fetching template:', error)
       return null
@@ -158,6 +192,7 @@ export class ResendEmailManager {
     metadata?: any
   }): Promise<void> {
     try {
+      const supabaseAdmin = getSupabaseAdmin()
       await supabaseAdmin.from('email_logs').insert({
         template_key: logData.template_key,
         recipient_email: logData.recipient_email,
@@ -179,6 +214,8 @@ export class ResendEmailManager {
    */
   async sendConfirmationEmail(userId: string, email: string, userName: string): Promise<{ success: boolean; error?: string }> {
     try {
+      const supabaseAdmin = getSupabaseAdmin()
+
       // Generate secure token
       const token = crypto.randomBytes(32).toString('hex')
       const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
@@ -226,6 +263,7 @@ export class ResendEmailManager {
    */
   async confirmEmailToken(token: string, email: string) {
     try {
+      const supabaseAdmin = getSupabaseAdmin()
       console.log('🔍 Starting email confirmation process')
       console.log('🔍 Token (first 8 chars):', token.substring(0, 8) + '...')
       console.log('🔍 Email:', email)
@@ -253,10 +291,12 @@ export class ResendEmailManager {
         }
         return { success: false, error: 'Invalid or expired confirmation token' }
       }
+
+      const tokenRow = tokenData as unknown as EmailConfirmationTokenRow
     
       // Check if token is expired
       const now = new Date()
-      const expiresAt = new Date(tokenData.expires_at)
+      const expiresAt = new Date(tokenRow.expires_at)
       console.log('🔍 Token expiry check:')
       console.log('  - Current time:', now.toISOString())
       console.log('  - Token expires at:', expiresAt.toISOString())
@@ -272,7 +312,7 @@ export class ResendEmailManager {
       const { error: updateError } = await supabaseAdmin
         .from('email_confirmation_tokens')
         .update({ used_at: new Date().toISOString() })
-        .eq('id', tokenData.id)
+        .eq('id', tokenRow.id)
       
       console.log('🔍 Token update result:')
       console.log('  - Update error:', updateError)
@@ -284,13 +324,13 @@ export class ResendEmailManager {
       // Confirm user email in Supabase Auth
       // Replace lines 276-279 with this approach
       console.log('🔍 Updating user email_confirm status...')
-      console.log('🔍 User ID:', tokenData.user_id)
+      console.log('🔍 User ID:', tokenRow.user_id)
       
       // Instead of directly updating email_confirm, we'll use the auth admin API
       const { data: updateResult, error: confirmError } = await supabaseAdmin.auth.admin.updateUserById(
-        tokenData.user_id,
+        tokenRow.user_id,
         { 
-          email_confirmed_at: new Date().toISOString(),
+          email_confirm: true,
           user_metadata: { email_confirmed: true }
         }
       )
@@ -311,23 +351,29 @@ export class ResendEmailManager {
       console.log('🔍 Creating user profile...')
       try {
         // Get user data from Supabase Auth to extract name information
-        const { data: userData, error: userError } = await supabaseAdmin.auth.admin.getUserById(tokenData.user_id)
+        const { data: userData, error: userError } = await supabaseAdmin.auth.admin.getUserById(tokenRow.user_id)
         
         if (userError) {
           console.log('⚠️ Could not fetch user data for profile creation:', userError)
         }
         
         // Extract first and last name from user metadata or email
-        const userMetadata = userData?.user?.user_metadata || {}
-        const email = userData?.user?.email || tokenData.email
-        const firstName = userMetadata.first_name || userMetadata.firstName || email.split('@')[0]
-        const lastName = userMetadata.last_name || userMetadata.lastName || ''
+        const userMetadata = (userData?.user?.user_metadata || {}) as Record<string, unknown>
+        const confirmedEmail = (userData?.user?.email || tokenRow.email) as string
+        const firstName =
+          (userMetadata.first_name as string | undefined) ||
+          (userMetadata.firstName as string | undefined) ||
+          confirmedEmail.split('@')[0]
+        const lastName =
+          (userMetadata.last_name as string | undefined) ||
+          (userMetadata.lastName as string | undefined) ||
+          ''
         
         // Check if user profile already exists
         const { data: existingProfile, error: checkError } = await supabaseAdmin
           .from('user_profiles')
           .select('id')
-          .eq('id', tokenData.user_id)
+          .eq('id', tokenRow.user_id)
           .single()
         
         if (checkError && checkError.code !== 'PGRST116') {
@@ -335,11 +381,12 @@ export class ResendEmailManager {
         }
         
         // Only create profile if it doesn't exist
-        if (!existingProfile) {
+        const existingProfileRow = existingProfile as unknown as UserProfileIdRow | null
+        if (!existingProfileRow?.id) {
           const { error: profileError } = await supabaseAdmin
             .from('user_profiles')
             .insert({
-              id: tokenData.user_id,
+              id: tokenRow.user_id,
               first_name: firstName,
               last_name: lastName,
               role: 'customer',
@@ -364,40 +411,17 @@ export class ResendEmailManager {
       await this.logEmail({
         template_key: 'email_confirmation_success',
         recipient_email: email,
-        recipient_name: tokenData.user_id,
+        recipient_name: tokenRow.user_id,
         subject: 'Email Confirmation Successful',
         status: 'success',
         metadata: {
-          user_id: tokenData.user_id,
-          token_id: tokenData.id,
+          user_id: tokenRow.user_id,
+          token_id: tokenRow.id,
           confirmed_at: new Date().toISOString()
         }
       })
       
-      return { success: true, userId: tokenData.user_id }
-      
-      // After successful confirmation, create a session
-      const rawSiteUrl2 = process.env.NEXT_PUBLIC_SITE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
-      const baseUrl2 = rawSiteUrl2.startsWith('http') ? rawSiteUrl2 : `https://${rawSiteUrl2}`
-      const { data: signInData, error: signInError } = await this.supabaseAdmin.auth.admin.generateLink({
-        type: 'magiclink',
-        email: decodedEmail,
-        options: {
-          redirectTo: `${baseUrl2}/dashboard`
-        }
-      })
-      
-      if (signInError) {
-        console.error('Error generating login link:', signInError)
-      }
-      
-      // Return the magic link for auto-login
-      return {
-        success: true,
-        message: 'Email confirmed successfully',
-        userId: user.id,
-        loginUrl: signInData?.properties?.action_link
-      }
+      return { success: true, userId: tokenRow.user_id }
     } catch (error) {
       console.error('❌ Unexpected error in confirmEmailToken:', error)
       console.error('❌ Error stack:', error instanceof Error ? error.stack : 'No stack trace')
