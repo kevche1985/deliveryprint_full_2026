@@ -1397,8 +1397,10 @@ const translations = {
           description: "Upload a CSV file to create or update products.",
           csvFileLabel: "CSV File",
           uploadButton: "Upload CSV",
+          downloadTemplateCsv: "Download CSV template",
+          downloadTemplateXls: "Download XLS template",
           csvGuidelines:
-            "Your CSV should contain columns like `id` (optional for updates), `name`, `description`, `price`, `category`, `image`, `is_active` (true/false), `is_featured` (true/false).",
+            "Your CSV should contain columns like `id` (optional for updates), `name`, `description`, `price`, `category`, `image`, `is_active` (true/false), `is_featured` (true/false), and `variants` (optional JSON). If `variants` is provided, existing variants for that product will be replaced.",
         },
         exportMenu: {
           triggerLabel: "Export",
@@ -3163,8 +3165,10 @@ const translations = {
           description: "Sube un archivo CSV para crear o actualizar productos.",
           csvFileLabel: "Archivo CSV",
           uploadButton: "Subir CSV",
+          downloadTemplateCsv: "Descargar plantilla CSV",
+          downloadTemplateXls: "Descargar plantilla XLS",
           csvGuidelines:
-            "Tu CSV debe contener columnas como `id` (opcional para actualizaciones), `name`, `description`, `price`, `category`, `image`, `is_active` (true/false), `is_featured` (true/false).",
+            "Tu CSV debe contener columnas como `id` (opcional para actualizaciones), `name`, `description`, `price`, `category`, `image`, `is_active` (true/false), `is_featured` (true/false), y `variants` (JSON opcional). Si se incluye `variants`, los variants existentes de ese producto se reemplazarán.",
         },
         exportMenu: {
           triggerLabel: "Exportar",

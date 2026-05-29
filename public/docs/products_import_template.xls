@@ -1,0 +1,2 @@
+id,name,description,price,category,image,is_active,is_featured,variants
+,Sample Product,Optional description,35,Digital Impression,https://example.com/image.jpg,true,false,"[{""name"":""Bond Paper Size"",""display"":""dropdown"",""sort_order"":1,""options"":[{""label"":""Letter Size"",""price_modifier"":0,""is_available"":true,""sort_order"":1},{""label"":""A4"",""price_modifier"":0,""is_available"":true,""sort_order"":2},{""label"":""12x18\"""",""price_modifier"":0,""is_available"":true,""sort_order"":3}]}]"

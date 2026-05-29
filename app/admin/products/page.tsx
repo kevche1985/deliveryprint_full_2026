@@ -501,9 +501,18 @@ export default function ProductManagement() {
         description: t("admin.products.toasts.importingProductsDesc"),
       })
 
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+      const token = session?.access_token || ""
+      if (!token) throw new Error("Unauthorized")
+
       const response = await fetch("/api/admin/products/import", {
         method: "POST",
         body: formData,
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
       })
 
       if (!response.ok) {
@@ -555,7 +564,17 @@ export default function ProductManagement() {
         return
       }
 
-      const response = await fetch(url)
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+      const token = session?.access_token || ""
+      if (!token) throw new Error("Unauthorized")
+
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
 
       if (!response.ok) {
         let errMsg: string | undefined
@@ -628,6 +647,22 @@ export default function ProductManagement() {
                 <div className="space-y-2">
                   <Label htmlFor="csv-file">{t("admin.products.importDialog.csvFileLabel")}</Label>
                   <Input id="csv-file" type="file" accept=".csv" ref={importFileRef} />
+                </div>
+                <div className="flex flex-wrap gap-3">
+                  <a
+                    href="/docs/products_import_template.csv"
+                    download
+                    className="text-sm text-[#8B0000] underline underline-offset-4"
+                  >
+                    {t("admin.products.importDialog.downloadTemplateCsv")}
+                  </a>
+                  <a
+                    href="/docs/products_import_template.xls"
+                    download
+                    className="text-sm text-[#8B0000] underline underline-offset-4"
+                  >
+                    {t("admin.products.importDialog.downloadTemplateXls")}
+                  </a>
                 </div>
                 <p className="text-sm text-gray-500">{t("admin.products.importDialog.csvGuidelines")}</p>
               </div>

@@ -1,9 +1,14 @@
 import { NextResponse } from "next/server"
-import { supabase } from "@/lib/supabase"
 import { parse } from "csv-parse/sync"
+import { supabaseServer } from "@/lib/supabase-server"
+import { requireRole } from "@/lib/rbac"
 
 export async function POST(request: Request) {
   try {
+    const auth = await requireRole(request, ["admin", "operator"])
+    if (!(auth as any).ok) return NextResponse.json({ error: "Unauthorized" }, { status: (auth as any).status || 401 })
+    const supabase = supabaseServer
+
     const formData = await request.formData()
     const file = formData.get("file") as File | null
 
@@ -18,15 +23,33 @@ export async function POST(request: Request) {
       columns: true, // Treat the first row as column headers
       skip_empty_lines: true,
       trim: true,
-    })
+    }) as Array<Record<string, any>>
 
     let createdCount = 0
     let updatedCount = 0
     const errors: string[] = []
 
+    const normalizeRecord = (record: Record<string, any>) => {
+      const normalized: Record<string, any> = {}
+      for (const [key, value] of Object.entries(record || {})) {
+        const normalizedKey = String(key).trim().toLowerCase().replace(/\s+/g, "_")
+        normalized[normalizedKey] = value
+      }
+      return normalized
+    }
+
+    const parseBool = (value: any, defaultValue: boolean) => {
+      if (value === null || value === undefined || String(value).trim() === "") return defaultValue
+      const s = String(value).trim().toLowerCase()
+      if (s === "true" || s === "1" || s === "yes") return true
+      if (s === "false" || s === "0" || s === "no") return false
+      return defaultValue
+    }
+
     for (const record of records) {
       try {
-        const { id, name, description, price, category, image, is_active, is_featured } = record
+        const row = normalizeRecord(record)
+        const { id, name, description, price, category, image, is_active, is_featured, variants } = row
 
         if (!name || !price) {
           errors.push(`Skipping row due to missing name or price: ${JSON.stringify(record)}`)
@@ -39,8 +62,8 @@ export async function POST(request: Request) {
           price: Number.parseFloat(price),
           category: category ? String(category) : null,
           image: image ? String(image) : null,
-          is_active: String(is_active).toLowerCase() === "true" || String(is_active) === "1",
-          is_featured: String(is_featured).toLowerCase() === "true" || String(is_featured) === "1",
+          is_active: parseBool(is_active, true),
+          is_featured: parseBool(is_featured, false),
         }
 
         if (isNaN(productData.price)) {
@@ -48,6 +71,20 @@ export async function POST(request: Request) {
           continue
         }
 
+        let variantsPayload: any[] | null = null
+        if (variants !== null && variants !== undefined && String(variants).trim() !== "") {
+          try {
+            const parsed = JSON.parse(String(variants))
+            variantsPayload = Array.isArray(parsed) ? parsed : null
+            if (!variantsPayload) {
+              errors.push(`Skipping variants due to invalid JSON shape: ${JSON.stringify(record)}`)
+            }
+          } catch (e: any) {
+            errors.push(`Skipping variants due to invalid JSON: ${e?.message || "Invalid JSON"} - ${JSON.stringify(record)}`)
+          }
+        }
+
+        let productId: string | null = null
         if (id) {
           // Attempt to update existing product
           const { data, error } = await supabase.from("products").update(productData).eq("id", id).select().single()
@@ -67,12 +104,14 @@ export async function POST(request: Request) {
                   `Failed to insert product with ID ${id}: ${insertError.message} - ${JSON.stringify(record)}`,
                 )
               } else {
+                productId = insertData?.id || String(id)
                 createdCount++
               }
             } else {
               errors.push(`Failed to update product with ID ${id}: ${error.message} - ${JSON.stringify(record)}`)
             }
           } else {
+            productId = data?.id || String(id)
             updatedCount++
           }
         } else {
@@ -81,7 +120,96 @@ export async function POST(request: Request) {
           if (error) {
             errors.push(`Failed to create product: ${error.message} - ${JSON.stringify(record)}`)
           } else {
+            productId = data?.id || null
             createdCount++
+          }
+        }
+
+        if (productId && variantsPayload && variantsPayload.length > 0) {
+          const { data: existingGroups, error: existingGroupsError } = await supabase
+            .from("product_variant_groups")
+            .select("id")
+            .eq("product_id", productId)
+
+          if (existingGroupsError) {
+            errors.push(`Failed loading existing variant groups: ${existingGroupsError.message} - ${JSON.stringify(record)}`)
+          } else {
+            const existingGroupIds = (existingGroups || []).map((g: any) => g.id)
+            if (existingGroupIds.length > 0) {
+              const { error: deleteOptionsError } = await supabase
+                .from("product_variant_options")
+                .delete()
+                .in("group_id", existingGroupIds)
+              if (deleteOptionsError) {
+                errors.push(`Failed deleting existing variant options: ${deleteOptionsError.message} - ${JSON.stringify(record)}`)
+              }
+            }
+            const { error: deleteGroupsError } = await supabase
+              .from("product_variant_groups")
+              .delete()
+              .eq("product_id", productId)
+            if (deleteGroupsError) {
+              errors.push(`Failed deleting existing variant groups: ${deleteGroupsError.message} - ${JSON.stringify(record)}`)
+            }
+
+            for (const g of variantsPayload) {
+              const groupName = g?.name
+              if (!groupName) continue
+              const display = g?.display ? String(g.display) : "dropdown"
+              const sortOrder =
+                g?.sort_order === null || g?.sort_order === undefined || String(g?.sort_order).trim() === ""
+                  ? null
+                  : Number.parseInt(String(g.sort_order), 10)
+              const { data: insertedGroup, error: insertGroupError } = await supabase
+                .from("product_variant_groups")
+                .insert([
+                  {
+                    product_id: productId,
+                    name: String(groupName),
+                    display,
+                    sort_order: Number.isFinite(sortOrder as any) ? sortOrder : null,
+                  },
+                ])
+                .select("id")
+                .single()
+              if (insertGroupError || !insertedGroup?.id) {
+                errors.push(
+                  `Failed inserting variant group "${String(groupName)}": ${insertGroupError?.message || "Unknown error"} - ${JSON.stringify(record)}`,
+                )
+                continue
+              }
+
+              const options = Array.isArray(g?.options) ? g.options : []
+              if (options.length === 0) continue
+              const optionRows = options
+                .filter((o: any) => o && (o.label || o.name))
+                .map((o: any) => {
+                  const label = o.label ?? o.name
+                  const priceModifier =
+                    o.price_modifier === null || o.price_modifier === undefined || String(o.price_modifier).trim() === ""
+                      ? 0
+                      : Number.parseFloat(String(o.price_modifier))
+                  const isAvailable = parseBool(o.is_available, true)
+                  const optionSortOrder =
+                    o.sort_order === null || o.sort_order === undefined || String(o.sort_order).trim() === ""
+                      ? null
+                      : Number.parseInt(String(o.sort_order), 10)
+                  return {
+                    group_id: insertedGroup.id,
+                    label: String(label),
+                    price_modifier: Number.isFinite(priceModifier) ? priceModifier : 0,
+                    is_available: isAvailable,
+                    sort_order: Number.isFinite(optionSortOrder as any) ? optionSortOrder : null,
+                  }
+                })
+
+              const { error: insertOptionsError } = await supabase.from("product_variant_options").insert(optionRows)
+              if (insertOptionsError) {
+                errors.push(
+                  `Failed inserting variant options for group "${String(groupName)}": ${insertOptionsError.message} - ${JSON.stringify(record)}`,
+                )
+              }
+            }
           }
         }
       } catch (rowError: any) {
