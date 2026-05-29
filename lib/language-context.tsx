@@ -112,6 +112,7 @@ const translations = {
       description: "Discover our wide range of custom printing products",
       catalogTitle: "Product Catalog",
       catalogDescription: "Browse our collection of customizable products",
+      fromLabel: "From",
       searchPlaceholder: "Search products...",
       allCategories: "All Categories",
       sortBy: "Sort by",
@@ -156,6 +157,7 @@ const translations = {
       returnsValue: "30-day return policy",
     },
     product: {
+      fromLabel: "From",
       starting_from: "Starting from – varies by option",
       upload_label: "Upload files",
       upload_hint: "Upload your print-ready design. Accepts: PDF, PSD, AI, EPS, SVG, PNG, JPG.",
@@ -2113,6 +2115,7 @@ const translations = {
       description: "Descubre nuestra amplia gama de productos de impresión personalizada",
       catalogTitle: "Catálogo de Productos",
       catalogDescription: "Explora nuestra colección de productos personalizables",
+      fromLabel: "Desde",
       searchPlaceholder: "Buscar productos...",
       allCategories: "Todas las categorías",
       sortBy: "Ordenar por",
@@ -2157,6 +2160,7 @@ const translations = {
       returnsValue: "Política de devolución de 30 días",
     },
     product: {
+      fromLabel: "Desde",
       starting_from: "Desde – varía según la opción",
       upload_label: "Cargar archivos",
       upload_hint: "Sube tu diseño listo para imprimir. Acepta: PDF, PSD, AI, EPS, SVG, PNG, JPG.",

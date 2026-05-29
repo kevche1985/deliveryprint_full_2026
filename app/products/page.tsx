@@ -144,7 +144,10 @@ export default function ProductsPage() {
                     <CardContent className="p-4 flex-1">
                       <h3 className="font-semibold text-lg mb-1 line-clamp-1">{product.name}</h3>
                        <p className="text-gray-600 text-sm mb-2 line-clamp-2">{product.description}</p>
-                       <p className="text-2xl font-bold text-[#8B0000]">${product.price.toFixed(2)}</p>
+                       <div className="flex items-baseline gap-2">
+                         <span className="text-sm font-medium text-gray-500">{t("products.fromLabel")}</span>
+                         <span className="text-2xl font-bold text-[#8B0000]">${product.price.toFixed(2)}</span>
+                       </div>
                      </CardContent>
                     <CardFooter className="p-4 pt-0 mt-auto">
                        <Link href={`/products/${product.id}`} className="w-full">

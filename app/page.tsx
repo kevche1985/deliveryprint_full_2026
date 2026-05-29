@@ -368,7 +368,10 @@ export default function HomePage() {
                         </CardDescription>
                       </CardContent>
                       <CardFooter className="flex justify-between items-center p-4 pt-0">
-                        <span className="text-2xl font-bold text-red-600">${product.price.toFixed(2)}</span>
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-sm font-medium text-gray-500">{t("products.fromLabel")}</span>
+                          <span className="text-2xl font-bold text-red-600">${product.price.toFixed(2)}</span>
+                        </div>
                         <Button onClick={() => handleAddToCartAndCheckout(product)}>
                           <ShoppingCart className="h-4 w-4 mr-2" />
                           {t("common.addToCart")}
