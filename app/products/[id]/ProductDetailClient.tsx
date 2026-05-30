@@ -12,6 +12,7 @@ import QuantityStepper from "./QuantityStepper"
 import ProductTabs from "./ProductTabs"
 import PriceDisplay from "./PriceDisplay"
 import { Button } from "@/components/ui/button"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Heart, Share2, ShoppingCart } from "lucide-react"
 
 export type ProductVariantOption = {
@@ -36,10 +37,29 @@ export type ProductDetail = {
   shortDescription: string | null
   description: string | null
   price: number
+  wholesaleTiers?: any | null
   acceptsUploads: boolean
   isCustomizable: boolean
   specifications: any | null
   shippingInfo: string | null
+}
+
+type PricingTier = {
+  quantity: number
+  price: number
+}
+
+function normalizeTiers(raw: any): PricingTier[] {
+  const src =
+    raw && typeof raw === "object" && !Array.isArray(raw) && Array.isArray((raw as any).tiers) ? (raw as any).tiers : raw
+  if (!Array.isArray(src)) return []
+  return (src as any[])
+    .map((t) => ({
+      quantity: Number.parseInt(String(t?.quantity ?? t?.qty ?? ""), 10),
+      price: Number.parseFloat(String(t?.price ?? "")),
+    }))
+    .filter((t) => Number.isFinite(t.quantity) && t.quantity > 0 && Number.isFinite(t.price) && t.price >= 0)
+    .sort((a, b) => a.quantity - b.quantity)
 }
 
 export type ProductMedia = {
@@ -78,6 +98,10 @@ export default function ProductDetailClient({
 
   const [sessionId] = useState(() => generateSessionId())
 
+  const tiers = useMemo(() => normalizeTiers(product.wholesaleTiers), [product.wholesaleTiers])
+  const tierMode = tiers.length > 0
+  const [selectedTierQty, setSelectedTierQty] = useState(() => tiers[0]?.quantity ?? 1)
+
   const initialSelections = useMemo(() => {
     const selections: Record<string, string> = {}
     variantGroups.forEach((group) => {
@@ -98,10 +122,17 @@ export default function ProductDetailClient({
   const dropdownGroups = useMemo(() => variantGroups.filter((g) => g.display === "dropdown"), [variantGroups])
   const chipGroup = useMemo(() => variantGroups.find((g) => g.display === "chips") || null, [variantGroups])
 
-  const resolvedPrice = useMemo(
-    () => resolvePrice(product.price, variantGroups, selectedOptions),
-    [product.price, selectedOptions, variantGroups],
+  const selectedTier = useMemo(
+    () => tiers.find((x) => x.quantity === selectedTierQty) || tiers[0] || null,
+    [tiers, selectedTierQty],
   )
+
+  const unitPrice = useMemo(() => {
+    const base = tierMode && selectedTier ? selectedTier.price : product.price
+    return resolvePrice(base, variantGroups, selectedOptions)
+  }, [tierMode, selectedTier, product.price, selectedOptions, variantGroups])
+
+  const effectiveQuantity = tierMode ? 1 : quantity
 
   const mainMediaUrl = media[0]?.url || "/placeholder.svg"
 
@@ -126,12 +157,13 @@ export default function ProductDetailClient({
       const doneUploads = uploadedFiles.filter((f) => f.status === "done" && f.storagePath)
       addItem({
         productId: product.id,
-        quantity,
-        price: resolvedPrice,
+        quantity: effectiveQuantity,
+        price: unitPrice,
         name: product.name,
         image: mainMediaUrl,
         customizations: {
           selectedOptions,
+          tier: tierMode && selectedTier ? { quantity: selectedTier.quantity, price: selectedTier.price } : null,
           uploadedFiles: doneUploads.map((f) => ({
             id: f.orderFileId,
             path: f.storagePath,
@@ -161,7 +193,29 @@ export default function ProductDetailClient({
         <div className="space-y-5">
           <h1 className="font-serif text-3xl text-gray-900">{product.name}</h1>
 
-          <PriceDisplay unitPrice={resolvedPrice} quantity={quantity} />
+          <PriceDisplay
+            unitPrice={unitPrice}
+            quantity={effectiveQuantity}
+            contextLine={tierMode && selectedTier ? `${t("product.quantity_label")}: ${selectedTier.quantity}` : null}
+          />
+
+          {tierMode && selectedTier ? (
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-900">{t("product.quantity_label")}</label>
+              <Select value={String(selectedTier.quantity)} onValueChange={(val) => setSelectedTierQty(Number.parseInt(val, 10))}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {tiers.map((tier) => (
+                    <SelectItem key={tier.quantity} value={String(tier.quantity)}>
+                      {tier.quantity} · ${tier.price.toFixed(2)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
 
           {dropdownGroups.length > 0 && (
             <VariantDropdowns
@@ -208,7 +262,7 @@ export default function ProductDetailClient({
             />
           ) : null}
 
-          <QuantityStepper value={quantity} onChange={setQuantity} />
+          {!tierMode ? <QuantityStepper value={quantity} onChange={setQuantity} /> : null}
 
           <Button className="w-full bg-[#E84E3A] hover:bg-[#d94634]" onClick={handleAddToCart} disabled={isAdding}>
             <ShoppingCart className="mr-2 h-4 w-4" />
@@ -236,7 +290,7 @@ export default function ProductDetailClient({
           isCustomizable={product.isCustomizable}
           productId={product.id}
           productName={product.name}
-          productPrice={resolvedPrice}
+          productPrice={unitPrice}
           productImage={mainMediaUrl}
         />
       </div>

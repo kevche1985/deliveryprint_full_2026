@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -64,6 +64,12 @@ type Category = {
   created_at?: string
 }
 
+type TierRow = {
+  id: string
+  quantity: string
+  price: string
+}
+
 export default function ProductManagement() {
   const { t } = useLanguage()
   const { toast } = useToast()
@@ -89,10 +95,11 @@ export default function ProductManagement() {
     accepts_uploads: false,
     is_customizable: false,
     shipping_info: "",
-    wholesale_tiers: "",
+    pricing_mode: "quantity" as "quantity" | "tiers",
     rating: "",
     review_count: "",
   })
+  const [tierRows, setTierRows] = useState<TierRow[]>([])
   const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(new Set())
   const importFileRef = useRef<HTMLInputElement>(null)
   const [mediaItems, setMediaItems] = useState<AdminMediaItem[]>([])
@@ -106,10 +113,29 @@ export default function ProductManagement() {
   const [editingCategory, setEditingCategory] = useState<Category | null>(null)
   const [categoryForm, setCategoryForm] = useState({ name: "", description: "", is_active: true })
 
+  const tiersMinPrice = useMemo(() => {
+    const prices = tierRows
+      .map((r) => Number.parseFloat(r.price))
+      .filter((n) => Number.isFinite(n) && n >= 0)
+      .sort((a, b) => a - b)
+    return prices[0] ?? null
+  }, [tierRows])
+
   useEffect(() => {
     loadProducts()
     loadCategories()
   }, [])
+
+  const addTierRow = () => {
+    setTierRows((prev) => [
+      ...prev,
+      { id: typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`, quantity: "", price: "" },
+    ])
+  }
+
+  const removeTierRow = (id: string) => {
+    setTierRows((prev) => prev.filter((r) => r.id !== id))
+  }
 
   const loadProducts = async () => {
     try {
@@ -233,14 +259,27 @@ export default function ProductManagement() {
       }
 
       let wholesaleTiersJson: any = null
-      const wholesaleRaw = formData.wholesale_tiers.trim()
-      if (wholesaleRaw) {
-        try {
-          wholesaleTiersJson = JSON.parse(wholesaleRaw)
-        } catch {
-          toast({ title: t("common.error"), description: t("admin.products.toasts.invalidWholesaleJson"), variant: "destructive" })
+      const tiers = tierRows
+        .map((r) => ({ quantity: Number.parseInt(r.quantity, 10), price: Number.parseFloat(r.price) }))
+        .filter((r) => Number.isFinite(r.quantity) && r.quantity > 0 && Number.isFinite(r.price) && r.price >= 0)
+        .sort((a, b) => a.quantity - b.quantity)
+
+      if (formData.pricing_mode === "tiers") {
+        if (tiers.length === 0) {
+          toast({ title: t("common.error"), description: t("admin.products.toasts.tiersRequired"), variant: "destructive" })
           return
         }
+        const qtySet = new Set<number>()
+        for (const tr of tiers) {
+          if (qtySet.has(tr.quantity)) {
+            toast({ title: t("common.error"), description: t("admin.products.toasts.tiersDuplicateQty"), variant: "destructive" })
+            return
+          }
+          qtySet.add(tr.quantity)
+        }
+        wholesaleTiersJson = { mode: "tiers", tiers }
+      } else {
+        wholesaleTiersJson = null
       }
 
       const ratingNum = formData.rating.trim() ? Number(formData.rating) : null
@@ -258,7 +297,7 @@ export default function ProductManagement() {
         name: formData.name,
         short_description: formData.short_description || null,
         description: formData.description || null,
-        price: Number.parseFloat(formData.price),
+        price: formData.pricing_mode === "tiers" ? tiers[0].price : Number.parseFloat(formData.price),
         category: formData.category || null,
         image: primaryImage,
         technique: formData.technique || null,
@@ -383,6 +422,27 @@ export default function ProductManagement() {
   const handleEdit = (product: Product) => {
     loadCategories()
     setEditingProduct(product)
+    const wholesale = product.wholesale_tiers
+    const mode =
+      wholesale && typeof wholesale === "object" && !Array.isArray(wholesale) && (wholesale as any).mode === "tiers"
+        ? "tiers"
+        : Array.isArray(wholesale)
+          ? "tiers"
+          : "quantity"
+    const tiersRaw =
+      wholesale && typeof wholesale === "object" && !Array.isArray(wholesale) && Array.isArray((wholesale as any).tiers)
+        ? (wholesale as any).tiers
+        : Array.isArray(wholesale)
+          ? wholesale
+          : []
+    const normalizedTiers: TierRow[] = (tiersRaw as any[])
+      .map((x) => ({
+        id: typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
+        quantity: x?.quantity != null ? String(x.quantity) : x?.qty != null ? String(x.qty) : "",
+        price: x?.price != null ? String(x.price) : "",
+      }))
+      .filter((x) => x.quantity || x.price)
+    setTierRows(normalizedTiers)
     setFormData({
       name: product.name,
       short_description: product.short_description || "",
@@ -397,7 +457,7 @@ export default function ProductManagement() {
       accepts_uploads: product.accepts_uploads ?? false,
       is_customizable: product.is_customizable ?? false,
       shipping_info: product.shipping_info || "",
-      wholesale_tiers: product.wholesale_tiers ? JSON.stringify(product.wholesale_tiers, null, 2) : "",
+      pricing_mode: mode,
       rating: product.rating != null ? String(product.rating) : "",
       review_count: product.review_count != null ? String(product.review_count) : "",
     })
@@ -424,7 +484,7 @@ export default function ProductManagement() {
       accepts_uploads: false,
       is_customizable: false,
       shipping_info: "",
-      wholesale_tiers: "",
+      pricing_mode: "quantity",
       rating: "",
       review_count: "",
     })
@@ -434,6 +494,7 @@ export default function ProductManagement() {
     setVariantGroups([])
     setOriginalVariantGroups([])
     setSpecifications([])
+    setTierRows([])
     setIsSaving(false)
   }
 
@@ -736,10 +797,10 @@ export default function ProductManagement() {
                         id="price"
                         type="number"
                         step="0.01"
-                        value={formData.price}
+                        value={formData.pricing_mode === "tiers" ? String(tiersMinPrice ?? "") : formData.price}
                         onChange={(e) => setFormData({ ...formData, price: e.target.value })}
                         required
-                        disabled={isSaving}
+                        disabled={isSaving || formData.pricing_mode === "tiers"}
                       />
                     </div>
                   </div>
@@ -862,16 +923,80 @@ export default function ProductManagement() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="wholesale_tiers">{t("admin.products.form.wholesaleTiersLabel")}</Label>
-                    <Textarea
-                      id="wholesale_tiers"
-                      value={formData.wholesale_tiers}
-                      onChange={(e) => setFormData({ ...formData, wholesale_tiers: e.target.value })}
-                      rows={4}
-                      disabled={isSaving}
-                      placeholder={t("admin.products.form.wholesaleTiersPlaceholder")}
-                    />
+                    <Label>{t("admin.products.form.pricingModeLabel")}</Label>
+                    <Select
+                      value={formData.pricing_mode}
+                      onValueChange={(val) => {
+                        const v = val as "quantity" | "tiers"
+                        setFormData({ ...formData, pricing_mode: v })
+                        if (v === "tiers" && tierRows.length === 0) addTierRow()
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="quantity">{t("admin.products.form.pricingModeQuantity")}</SelectItem>
+                        <SelectItem value="tiers">{t("admin.products.form.pricingModeTiers")}</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
+
+                  {formData.pricing_mode === "tiers" ? (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <Label>{t("admin.products.form.tiersLabel")}</Label>
+                        <Button type="button" variant="outline" onClick={addTierRow} disabled={isSaving}>
+                          <Plus className="mr-2 h-4 w-4" />
+                          {t("admin.products.form.addTierButton")}
+                        </Button>
+                      </div>
+                      <div className="space-y-2">
+                        {tierRows.map((row) => (
+                          <div key={row.id} className="grid grid-cols-12 gap-2 items-end">
+                            <div className="col-span-5 space-y-1">
+                              <Label>{t("admin.products.form.tierQuantityLabel")}</Label>
+                              <Input
+                                type="number"
+                                value={row.quantity}
+                                onChange={(e) =>
+                                  setTierRows((prev) =>
+                                    prev.map((r) => (r.id === row.id ? { ...r, quantity: e.target.value } : r)),
+                                  )
+                                }
+                                disabled={isSaving}
+                              />
+                            </div>
+                            <div className="col-span-5 space-y-1">
+                              <Label>{t("admin.products.form.tierPriceLabel")}</Label>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                value={row.price}
+                                onChange={(e) =>
+                                  setTierRows((prev) =>
+                                    prev.map((r) => (r.id === row.id ? { ...r, price: e.target.value } : r)),
+                                  )
+                                }
+                                disabled={isSaving}
+                              />
+                            </div>
+                            <div className="col-span-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => removeTierRow(row.id)}
+                                disabled={isSaving}
+                                className="w-full"
+                              >
+                                {t("admin.products.form.removeTierButton")}
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
 
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
