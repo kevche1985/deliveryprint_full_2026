@@ -161,7 +161,7 @@ export default function ProductDetailClient({
         <div className="space-y-5">
           <h1 className="font-serif text-3xl text-gray-900">{product.name}</h1>
 
-          <PriceDisplay price={resolvedPrice} />
+          <PriceDisplay unitPrice={resolvedPrice} quantity={quantity} />
 
           {dropdownGroups.length > 0 && (
             <VariantDropdowns

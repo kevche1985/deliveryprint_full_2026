@@ -158,6 +158,8 @@ const translations = {
     },
     product: {
       fromLabel: "From",
+      totalLabel: "Total",
+      eachLabel: "each",
       starting_from: "Starting from – varies by option",
       upload_label: "Upload files",
       upload_hint: "Upload your print-ready design. Accepts: PDF, PSD, AI, EPS, SVG, PNG, JPG.",
@@ -2163,6 +2165,8 @@ const translations = {
     },
     product: {
       fromLabel: "Desde",
+      totalLabel: "Total",
+      eachLabel: "c/u",
       starting_from: "Desde – varía según la opción",
       upload_label: "Cargar archivos",
       upload_hint: "Sube tu diseño listo para imprimir. Acepta: PDF, PSD, AI, EPS, SVG, PNG, JPG.",
