@@ -96,6 +96,7 @@ export default function ProductManagement() {
     is_customizable: false,
     shipping_info: "",
     pricing_mode: "quantity" as "quantity" | "tiers",
+    variant_price_mode: "add" as "add" | "override",
     rating: "",
     review_count: "",
   })
@@ -277,9 +278,13 @@ export default function ProductManagement() {
           }
           qtySet.add(tr.quantity)
         }
-        wholesaleTiersJson = { mode: "tiers", tiers }
+        wholesaleTiersJson = {
+          mode: "tiers",
+          tiers,
+          ...(formData.variant_price_mode === "override" ? { variant_price_mode: "override" } : {}),
+        }
       } else {
-        wholesaleTiersJson = null
+        wholesaleTiersJson = formData.variant_price_mode === "override" ? { variant_price_mode: "override" } : null
       }
 
       const ratingNum = formData.rating.trim() ? Number(formData.rating) : null
@@ -443,6 +448,10 @@ export default function ProductManagement() {
       }))
       .filter((x) => x.quantity || x.price)
     setTierRows(normalizedTiers)
+    const variantMode =
+      wholesale && typeof wholesale === "object" && !Array.isArray(wholesale) && (wholesale as any).variant_price_mode === "override"
+        ? "override"
+        : "add"
     setFormData({
       name: product.name,
       short_description: product.short_description || "",
@@ -458,6 +467,7 @@ export default function ProductManagement() {
       is_customizable: product.is_customizable ?? false,
       shipping_info: product.shipping_info || "",
       pricing_mode: mode,
+      variant_price_mode: variantMode,
       rating: product.rating != null ? String(product.rating) : "",
       review_count: product.review_count != null ? String(product.review_count) : "",
     })
@@ -485,6 +495,7 @@ export default function ProductManagement() {
       is_customizable: false,
       shipping_info: "",
       pricing_mode: "quantity",
+      variant_price_mode: "add",
       rating: "",
       review_count: "",
     })
@@ -938,6 +949,22 @@ export default function ProductManagement() {
                       <SelectContent>
                         <SelectItem value="quantity">{t("admin.products.form.pricingModeQuantity")}</SelectItem>
                         <SelectItem value="tiers">{t("admin.products.form.pricingModeTiers")}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>{t("admin.products.form.variantPricingModeLabel")}</Label>
+                    <Select
+                      value={formData.variant_price_mode}
+                      onValueChange={(val) => setFormData({ ...formData, variant_price_mode: val as "add" | "override" })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="add">{t("admin.products.form.variantPricingAdd")}</SelectItem>
+                        <SelectItem value="override">{t("admin.products.form.variantPricingOverride")}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

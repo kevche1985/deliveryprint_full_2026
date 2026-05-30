@@ -70,12 +70,32 @@ export type ProductMedia = {
   sortOrder: number
 }
 
-function resolvePrice(basePrice: number, variantGroups: ProductVariantGroup[], selectedOptions: Record<string, string>): number {
-  return variantGroups.reduce((price, group) => {
-    const selectedOptionId = selectedOptions[group.id]
-    const option = group.options.find((o) => o.id === selectedOptionId)
-    return price + (option?.price_modifier ?? 0)
-  }, basePrice)
+type VariantPriceMode = "add" | "override"
+
+function resolvePrice(
+  basePrice: number,
+  variantGroups: ProductVariantGroup[],
+  selectedOptions: Record<string, string>,
+  mode: VariantPriceMode,
+): number {
+  if (mode === "add") {
+    return variantGroups.reduce((price, group) => {
+      const selectedOptionId = selectedOptions[group.id]
+      const option = group.options.find((o) => o.id === selectedOptionId)
+      return price + (option?.price_modifier ?? 0)
+    }, basePrice)
+  }
+
+  const selectedPrices = variantGroups
+    .map((group) => {
+      const selectedOptionId = selectedOptions[group.id]
+      const option = group.options.find((o) => o.id === selectedOptionId)
+      return option?.price_modifier
+    })
+    .filter((v): v is number => typeof v === "number" && Number.isFinite(v))
+
+  if (selectedPrices.length === 0) return basePrice
+  return Math.max(...selectedPrices)
 }
 
 function generateSessionId() {
@@ -122,6 +142,12 @@ export default function ProductDetailClient({
   const dropdownGroups = useMemo(() => variantGroups.filter((g) => g.display === "dropdown"), [variantGroups])
   const chipGroup = useMemo(() => variantGroups.find((g) => g.display === "chips") || null, [variantGroups])
 
+  const variantPriceMode: VariantPriceMode = useMemo(() => {
+    const raw = product.wholesaleTiers
+    if (raw && typeof raw === "object" && !Array.isArray(raw) && (raw as any).variant_price_mode === "override") return "override"
+    return "add"
+  }, [product.wholesaleTiers])
+
   const selectedTier = useMemo(
     () => tiers.find((x) => x.quantity === selectedTierQty) || tiers[0] || null,
     [tiers, selectedTierQty],
@@ -129,8 +155,8 @@ export default function ProductDetailClient({
 
   const unitPrice = useMemo(() => {
     const base = tierMode && selectedTier ? selectedTier.price : product.price
-    return resolvePrice(base, variantGroups, selectedOptions)
-  }, [tierMode, selectedTier, product.price, selectedOptions, variantGroups])
+    return resolvePrice(base, variantGroups, selectedOptions, variantPriceMode)
+  }, [tierMode, selectedTier, product.price, selectedOptions, variantGroups, variantPriceMode])
 
   const effectiveQuantity = tierMode ? 1 : quantity
 
