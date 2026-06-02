@@ -151,7 +151,7 @@ export default function ProductsPage() {
                      </CardContent>
                     <CardFooter className="p-4 pt-0 mt-auto">
                        <Link href={`/products/${product.id}`} className="w-full">
-                         <Button className="w-full bg-[#8B0000] hover:bg-[#6B0000]">{product.is_customizable ? t("products.buttonCustomize") : language === "es" ? "Ver" : "View"}</Button>
+                        <Button className="w-full bg-[#8B0000] hover:bg-[#6B0000]">{language === "es" ? "Ver" : "View"}</Button>
                        </Link>
                      </CardFooter>
                    </Card>
