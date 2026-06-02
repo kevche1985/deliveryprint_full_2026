@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { getAIProviderSettings } from "@/lib/ai-provider-settings"
 
 // Explicitly set this as a server-side only route
 export const runtime = "nodejs"
@@ -22,12 +23,19 @@ export async function POST(request: NextRequest) {
     console.log("Generating logo for:", { businessName, industry, style, colors })
 
     try {
-      // Get API key from environment variable - NEVER hardcode API keys
-      const apiKey = process.env.OPENAI_API_KEY
-
-      if (!apiKey) {
-        throw new Error("OpenAI API key is not set in environment variables")
+      const settings = await getAIProviderSettings(userId)
+      if (!settings.isActive) {
+        return NextResponse.json({ error: "AI is disabled" }, { status: 503 })
       }
+
+      const apiKey = settings.apiKey
+      if (!apiKey) {
+        throw new Error("AI API key is not configured")
+      }
+
+      const baseUrl = settings.baseUrl.replace(/\/$/, "")
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), settings.timeoutMs)
 
       // Create a detailed prompt for the logo using the new format
       const prompt = `Create Your Custom Logo
@@ -52,21 +60,25 @@ Create a clean logo with a white background, suitable for a professional busines
       console.log("Sending request to OpenAI API")
 
       // Make direct API call to OpenAI
-      const response = await fetch("https://api.openai.com/v1/images/generations", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
+      const response = await fetch(
+        `${baseUrl}/images/generations`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model: settings.model,
+            prompt,
+            n: 1,
+            size: "1024x1024",
+            quality: "standard",
+            response_format: "url",
+          }),
+          signal: controller.signal,
         },
-        body: JSON.stringify({
-          model: "dall-e-3",
-          prompt,
-          n: 1,
-          size: "1024x1024",
-          quality: "standard",
-          response_format: "url",
-        }),
-      })
+      ).finally(() => clearTimeout(timeout))
 
       // Handle API errors
       if (!response.ok) {

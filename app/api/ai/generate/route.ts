@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { buildPromptFromTemplate } from "@/lib/ai-prompts"
+import { getAIProviderSettings } from "@/lib/ai-provider-settings"
 import { z } from "zod"
 
 // Explicitly set this as a server-side only route
@@ -37,16 +38,31 @@ export async function POST(request: NextRequest) {
     console.log("Processing AI generation:", { type, userId, promptLength: (prompt || "").length })
 
     try {
-      // Get API key from environment variable - NEVER hardcode API keys
-      const apiKey = process.env.OPENAI_API_KEY
+      const settings = await getAIProviderSettings(userId)
+      if (!settings.isActive) {
+        return NextResponse.json({ error: "AI is disabled" }, { status: 503 })
+      }
 
+      const apiKey = settings.apiKey
       if (!apiKey) {
-        throw new Error("OpenAI API key is not set in environment variables")
+        throw new Error("AI API key is not configured")
+      }
+
+      const baseUrl = settings.baseUrl.replace(/\/$/, "")
+
+      const fetchWithTimeout = async (url: string, init?: RequestInit) => {
+        const controller = new AbortController()
+        const timeout = setTimeout(() => controller.abort(), settings.timeoutMs)
+        try {
+          return await fetch(url, { ...init, signal: controller.signal })
+        } finally {
+          clearTimeout(timeout)
+        }
       }
 
       // Test OpenAI connection first
       console.log("Testing OpenAI connection...")
-      const testResponse = await fetch("https://api.openai.com/v1/models", {
+      const testResponse = await fetchWithTimeout(`${baseUrl}/models`, {
         headers: {
           Authorization: `Bearer ${apiKey}`,
         },
@@ -58,7 +74,7 @@ export async function POST(request: NextRequest) {
 
       // Moderate content first
       console.log("Moderating content...")
-      const moderationResponse = await fetch("https://api.openai.com/v1/moderations", {
+      const moderationResponse = await fetchWithTimeout(`${baseUrl}/moderations`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -93,14 +109,14 @@ export async function POST(request: NextRequest) {
       console.log("Enhanced prompt created, sending to OpenAI...")
 
       // Generate image with OpenAI
-      const response = await fetch("https://api.openai.com/v1/images/generations", {
+      const response = await fetchWithTimeout(`${baseUrl}/images/generations`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: "dall-e-3",
+          model: settings.model,
           prompt: enhancedPrompt,
           n: 1,
           size: "1024x1024",

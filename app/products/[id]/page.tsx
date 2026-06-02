@@ -14,6 +14,7 @@ type VariantOptionRow = {
   id: string
   label: string
   price_modifier: number
+  tier_pricing: any | null
   is_available: boolean | null
   sort_order: number | null
 }
@@ -64,7 +65,7 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
         name,
         display,
         sort_order,
-        product_variant_options ( id, label, price_modifier, is_available, sort_order )
+        product_variant_options ( id, label, price_modifier, tier_pricing, is_available, sort_order )
       )
     `,
     )
@@ -116,6 +117,7 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
           id: o.id,
           label: o.label,
           price_modifier: Number(o.price_modifier ?? 0),
+          tier_pricing: o.tier_pricing ?? null,
           is_available: o.is_available ?? true,
           sortOrder: o.sort_order ?? 0,
         })),
