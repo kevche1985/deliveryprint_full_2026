@@ -49,7 +49,7 @@ export async function GET(request: Request) {
         ? { data: [], error: null }
         : await supabase
             .from("product_variant_options")
-            .select("group_id, label, price_modifier, is_available, sort_order")
+            .select("group_id, label, price_modifier, tier_pricing, is_available, sort_order")
             .in("group_id", groupIds)
             .order("sort_order", { ascending: true, nullsFirst: true })
 
@@ -64,6 +64,7 @@ export async function GET(request: Request) {
       list.push({
         label: (opt as any).label,
         price_modifier: (opt as any).price_modifier,
+        tier_pricing: (opt as any).tier_pricing ?? null,
         is_available: (opt as any).is_available,
         sort_order: (opt as any).sort_order,
       })
@@ -84,12 +85,15 @@ export async function GET(request: Request) {
     }
 
     const exportRows = products.map((p: any) => ({
+      operation: "update",
       ...p,
+      wholesale_tiers: JSON.stringify(p.wholesale_tiers ?? null),
       variants: JSON.stringify(groupsByProductId.get(p.id) || []),
     }))
 
     // Define columns for CSV, ensuring all relevant fields are included
     const columns = [
+      { key: "operation", header: "operation" },
       { key: "id", header: "id" },
       { key: "name", header: "name" },
       { key: "description", header: "description" },
@@ -98,6 +102,7 @@ export async function GET(request: Request) {
       { key: "image", header: "image" },
       { key: "is_active", header: "is_active" },
       { key: "is_featured", header: "is_featured" },
+      { key: "wholesale_tiers", header: "wholesale_tiers" },
       { key: "variants", header: "variants" },
       { key: "created_at", header: "created_at" },
       { key: "updated_at", header: "updated_at" },

@@ -34,6 +34,34 @@ const CartContext = createContext<CartContextType | undefined>(undefined)
 // Generate a unique ID for cart items
 const generateId = () => Math.random().toString(36).substring(2, 9)
 
+const normalizeTiers = (raw: any) => {
+  const src =
+    raw && typeof raw === "object" && !Array.isArray(raw) && Array.isArray((raw as any).tiers) ? (raw as any).tiers : raw
+  if (!Array.isArray(src)) return []
+  return (src as any[])
+    .map((t) => ({
+      quantity: Number.parseInt(String(t?.quantity ?? t?.qty ?? ""), 10),
+      maxQuantity: Number.isFinite(Number.parseInt(String(t?.maxQuantity ?? t?.max_quantity ?? ""), 10))
+        ? Number.parseInt(String(t?.maxQuantity ?? t?.max_quantity ?? ""), 10)
+        : undefined,
+      price: Number.parseFloat(String(t?.price ?? "")),
+    }))
+    .filter((t) => Number.isFinite(t.quantity) && t.quantity > 0 && Number.isFinite(t.price) && t.price >= 0)
+    .sort((a, b) => a.quantity - b.quantity)
+}
+
+const findTierForQuantity = (tiers: any[], qty: number) => {
+  if (!tiers.length) return null
+  const sorted = tiers.slice().sort((a, b) => a.quantity - b.quantity)
+  for (let i = sorted.length - 1; i >= 0; i--) {
+    const t = sorted[i]
+    if (qty < t.quantity) continue
+    if (t.maxQuantity != null && Number.isFinite(t.maxQuantity) && qty > t.maxQuantity) continue
+    return t
+  }
+  return null
+}
+
 const stableStringify = (value: any) => {
   try {
     const seen = new WeakSet()
@@ -149,7 +177,25 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const updateQuantity = (id: string, quantity: number) => {
     try {
       if (quantity < 1) return
-      setItems(items.map((item) => (item.id === id ? { ...item, quantity } : item)))
+      setItems(
+        items.map((item) => {
+          if (item.id !== id) return item
+          const next: CartItem = { ...item, quantity }
+          const tier = item.customizations?.tier
+          if (tier?.mode === "range" && tier?.wholesaleTiers) {
+            const tiers = normalizeTiers(tier.wholesaleTiers)
+            const match = findTierForQuantity(tiers, quantity)
+            const baseUnit = match ? match.price : Number(tier.basePrice ?? item.price)
+            const modifiers = Array.isArray(tier.variantModifiers) ? tier.variantModifiers.filter((v: any) => typeof v === "number" && Number.isFinite(v)) : []
+            if (tier.variantPriceMode === "override") {
+              next.price = modifiers.length ? Math.max(...modifiers) : baseUnit
+            } else {
+              next.price = baseUnit + modifiers.reduce((a: number, b: number) => a + b, 0)
+            }
+          }
+          return next
+        }),
+      )
     } catch (error) {
       console.error("Failed to update quantity:", error)
     }

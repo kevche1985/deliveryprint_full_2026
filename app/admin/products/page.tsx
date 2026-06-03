@@ -67,6 +67,7 @@ type Category = {
 type TierRow = {
   id: string
   quantity: string
+  maxQuantity: string
   price: string
 }
 
@@ -96,7 +97,9 @@ export default function ProductManagement() {
     is_customizable: false,
     shipping_info: "",
     pricing_mode: "quantity" as "quantity" | "tiers",
+    tier_mode: "quantity" as "quantity" | "range",
     variant_price_mode: "add" as "add" | "override",
+    variant_tier_stack: false,
     rating: "",
     review_count: "",
   })
@@ -130,7 +133,12 @@ export default function ProductManagement() {
   const addTierRow = () => {
     setTierRows((prev) => [
       ...prev,
-      { id: typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`, quantity: "", price: "" },
+      {
+        id: typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
+        quantity: "",
+        maxQuantity: "",
+        price: "",
+      },
     ])
   }
 
@@ -262,14 +270,27 @@ export default function ProductManagement() {
 
       let wholesaleTiersJson: any = null
       const tiers = tierRows
-        .map((r) => ({ quantity: Number.parseInt(r.quantity, 10), price: Number.parseFloat(r.price) }))
+        .map((r) => ({
+          quantity: Number.parseInt(r.quantity, 10),
+          maxQuantity: r.maxQuantity.trim() ? Number.parseInt(r.maxQuantity, 10) : undefined,
+          price: Number.parseFloat(r.price),
+        }))
         .filter((r) => Number.isFinite(r.quantity) && r.quantity > 0 && Number.isFinite(r.price) && r.price >= 0)
         .sort((a, b) => a.quantity - b.quantity)
 
       if (formData.pricing_mode === "tiers") {
+        const variantHasTiers = variantGroups.some((g) =>
+          g.options.some((o) => {
+            const raw = (o as any).tierPricing
+            const src = raw && typeof raw === "object" && !Array.isArray(raw) && Array.isArray((raw as any).tiers) ? (raw as any).tiers : raw
+            return Array.isArray(src) && src.length > 0
+          }),
+        )
         if (tiers.length === 0) {
-          toast({ title: t("common.error"), description: t("admin.products.toasts.tiersRequired"), variant: "destructive" })
-          return
+          if (!variantHasTiers) {
+            toast({ title: t("common.error"), description: t("admin.products.toasts.tiersRequired"), variant: "destructive" })
+            return
+          }
         }
         const qtySet = new Set<number>()
         for (const tr of tiers) {
@@ -279,13 +300,52 @@ export default function ProductManagement() {
           }
           qtySet.add(tr.quantity)
         }
-        wholesaleTiersJson = {
-          mode: "tiers",
-          tiers,
-          ...(formData.variant_price_mode === "override" ? { variant_price_mode: "override" } : {}),
+
+        if (tiers.length > 0 && formData.tier_mode === "range") {
+          for (let i = 0; i < tiers.length; i++) {
+            const tr = tiers[i]
+            const isLast = i === tiers.length - 1
+            const max = tr.maxQuantity
+            if (!isLast && !Number.isFinite(max as any)) {
+              toast({ title: t("common.error"), description: t("admin.products.toasts.tiersRequired"), variant: "destructive" })
+              return
+            }
+            if (Number.isFinite(max as any) && (max as number) < tr.quantity) {
+              toast({ title: t("common.error"), description: t("admin.products.toasts.tiersRequired"), variant: "destructive" })
+              return
+            }
+            if (!isLast) {
+              const nextMin = tiers[i + 1].quantity
+              const currentMax = max as number
+              if (Number.isFinite(currentMax) && currentMax >= nextMin) {
+                toast({ title: t("common.error"), description: t("admin.products.toasts.tiersRequired"), variant: "destructive" })
+                return
+              }
+            }
+          }
         }
+        wholesaleTiersJson =
+          tiers.length > 0
+            ? {
+                mode: "tiers",
+                tier_mode: formData.tier_mode,
+                tiers,
+                ...(formData.variant_price_mode === "override" ? { variant_price_mode: "override" } : {}),
+                ...(formData.variant_tier_stack ? { variant_tier_stack: true } : {}),
+              }
+            : {
+                mode: "tiers",
+                ...(formData.variant_price_mode === "override" ? { variant_price_mode: "override" } : {}),
+                ...(formData.variant_tier_stack ? { variant_tier_stack: true } : {}),
+              }
       } else {
-        wholesaleTiersJson = formData.variant_price_mode === "override" ? { variant_price_mode: "override" } : null
+        wholesaleTiersJson =
+          formData.variant_price_mode === "override" || formData.variant_tier_stack
+            ? {
+                ...(formData.variant_price_mode === "override" ? { variant_price_mode: "override" } : {}),
+                ...(formData.variant_tier_stack ? { variant_tier_stack: true } : {}),
+              }
+            : null
       }
 
       const ratingNum = formData.rating.trim() ? Number(formData.rating) : null
@@ -303,7 +363,7 @@ export default function ProductManagement() {
         name: formData.name,
         short_description: formData.short_description || null,
         description: formData.description || null,
-        price: formData.pricing_mode === "tiers" ? tiers[0].price : Number.parseFloat(formData.price),
+        price: formData.pricing_mode === "tiers" && tiers.length > 0 ? tiers[0].price : Number.parseFloat(formData.price),
         category: formData.category || null,
         image: primaryImage,
         technique: formData.technique || null,
@@ -446,6 +506,12 @@ export default function ProductManagement() {
       .map((x) => ({
         id: typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
         quantity: x?.quantity != null ? String(x.quantity) : x?.qty != null ? String(x.qty) : "",
+        maxQuantity:
+          x?.maxQuantity != null
+            ? String(x.maxQuantity)
+            : x?.max_quantity != null
+              ? String(x.max_quantity)
+              : "",
         price: x?.price != null ? String(x.price) : "",
       }))
       .filter((x) => x.quantity || x.price)
@@ -454,6 +520,14 @@ export default function ProductManagement() {
       wholesale && typeof wholesale === "object" && !Array.isArray(wholesale) && (wholesale as any).variant_price_mode === "override"
         ? "override"
         : "add"
+    const variantTierStack =
+      wholesale && typeof wholesale === "object" && !Array.isArray(wholesale) && (wholesale as any).variant_tier_stack === true ? true : false
+    const tierMode =
+      wholesale && typeof wholesale === "object" && !Array.isArray(wholesale) && (wholesale as any).tier_mode === "range"
+        ? "range"
+        : normalizedTiers.some((tr) => tr.maxQuantity.trim())
+          ? "range"
+          : "quantity"
     setFormData({
       name: product.name,
       short_description: product.short_description || "",
@@ -469,7 +543,9 @@ export default function ProductManagement() {
       is_customizable: product.is_customizable ?? false,
       shipping_info: product.shipping_info || "",
       pricing_mode: mode,
+      tier_mode: tierMode,
       variant_price_mode: variantMode,
+      variant_tier_stack: variantTierStack,
       rating: product.rating != null ? String(product.rating) : "",
       review_count: product.review_count != null ? String(product.review_count) : "",
     })
@@ -497,7 +573,9 @@ export default function ProductManagement() {
       is_customizable: false,
       shipping_info: "",
       pricing_mode: "quantity",
+      tier_mode: "quantity",
       variant_price_mode: "add",
+      variant_tier_stack: false,
       rating: "",
       review_count: "",
     })
@@ -971,6 +1049,16 @@ export default function ProductManagement() {
                     </Select>
                   </div>
 
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      id="variant_tier_stack"
+                      checked={formData.variant_tier_stack}
+                      onCheckedChange={(checked) => setFormData({ ...formData, variant_tier_stack: checked })}
+                      disabled={isSaving}
+                    />
+                    <Label htmlFor="variant_tier_stack">Add modifiers on top of tier price</Label>
+                  </div>
+
                   {formData.pricing_mode === "tiers" ? (
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
@@ -981,9 +1069,24 @@ export default function ProductManagement() {
                         </Button>
                       </div>
                       <div className="space-y-2">
+                        <Label>Tier type</Label>
+                        <Select
+                          value={formData.tier_mode}
+                          onValueChange={(val) => setFormData({ ...formData, tier_mode: val as "quantity" | "range" })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="quantity">Quantity list</SelectItem>
+                            <SelectItem value="range">Ranges</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
                         {tierRows.map((row) => (
                           <div key={row.id} className="grid grid-cols-12 gap-2 items-end">
-                            <div className="col-span-5 space-y-1">
+                            <div className={formData.tier_mode === "range" ? "col-span-4 space-y-1" : "col-span-5 space-y-1"}>
                               <Label>{t("admin.products.form.tierQuantityLabel")}</Label>
                               <Input
                                 type="number"
@@ -996,7 +1099,22 @@ export default function ProductManagement() {
                                 disabled={isSaving}
                               />
                             </div>
-                            <div className="col-span-5 space-y-1">
+                            {formData.tier_mode === "range" ? (
+                              <div className="col-span-3 space-y-1">
+                                <Label>Max qty</Label>
+                                <Input
+                                  type="number"
+                                  value={row.maxQuantity}
+                                  onChange={(e) =>
+                                    setTierRows((prev) =>
+                                      prev.map((r) => (r.id === row.id ? { ...r, maxQuantity: e.target.value } : r)),
+                                    )
+                                  }
+                                  disabled={isSaving}
+                                />
+                              </div>
+                            ) : null}
+                            <div className={formData.tier_mode === "range" ? "col-span-3 space-y-1" : "col-span-5 space-y-1"}>
                               <Label>{t("admin.products.form.tierPriceLabel")}</Label>
                               <Input
                                 type="number"
@@ -1010,7 +1128,7 @@ export default function ProductManagement() {
                                 disabled={isSaving}
                               />
                             </div>
-                            <div className="col-span-2">
+                            <div className={formData.tier_mode === "range" ? "col-span-2" : "col-span-2"}>
                               <Button
                                 type="button"
                                 variant="outline"

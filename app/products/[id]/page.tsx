@@ -2,6 +2,8 @@ import { notFound } from "next/navigation"
 import { supabaseServer } from "@/lib/supabase-server"
 import ProductDetailClient from "./ProductDetailClient"
 
+export const dynamic = "force-dynamic"
+
 type ProductMediaRow = {
   id: string
   storage_path: string

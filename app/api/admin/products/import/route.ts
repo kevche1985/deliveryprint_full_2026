@@ -49,14 +49,14 @@ export async function POST(request: Request) {
     for (const record of records) {
       try {
         const row = normalizeRecord(record)
-        const { id, name, description, price, category, image, is_active, is_featured, variants } = row
+        const { operation, id, name, description, price, category, image, is_active, is_featured, wholesale_tiers, variants } = row
 
         if (!name || !price) {
           errors.push(`Skipping row due to missing name or price: ${JSON.stringify(record)}`)
           continue
         }
 
-        const productData = {
+        const productData: any = {
           name: String(name),
           description: description ? String(description) : null,
           price: Number.parseFloat(price),
@@ -69,6 +69,14 @@ export async function POST(request: Request) {
         if (isNaN(productData.price)) {
           errors.push(`Skipping row due to invalid price: ${JSON.stringify(record)}`)
           continue
+        }
+
+        if (wholesale_tiers !== null && wholesale_tiers !== undefined && String(wholesale_tiers).trim() !== "") {
+          try {
+            productData.wholesale_tiers = JSON.parse(String(wholesale_tiers))
+          } catch (e: any) {
+            errors.push(`Skipping wholesale_tiers due to invalid JSON: ${e?.message || "Invalid JSON"} - ${JSON.stringify(record)}`)
+          }
         }
 
         let variantsPayload: any[] | null = null
@@ -85,7 +93,33 @@ export async function POST(request: Request) {
         }
 
         let productId: string | null = null
-        if (id) {
+        const op = operation ? String(operation).trim().toLowerCase() : ""
+        const isExplicitNew = op === "new" || op === "create" || op === "insert"
+        const isExplicitUpdate = op === "update"
+
+        if (isExplicitUpdate && !id) {
+          errors.push(`Skipping row due to missing id for update operation: ${JSON.stringify(record)}`)
+          continue
+        }
+
+        if (isExplicitNew) {
+          const insertRow = id ? [{ ...productData, id: String(id) }] : [productData]
+          const { data, error } = await supabase.from("products").insert(insertRow).select().single()
+          if (error) {
+            errors.push(`Failed to create product: ${error.message} - ${JSON.stringify(record)}`)
+          } else {
+            productId = data?.id || null
+            createdCount++
+          }
+        } else if (isExplicitUpdate) {
+          const { data, error } = await supabase.from("products").update(productData).eq("id", String(id)).select().single()
+          if (error) {
+            errors.push(`Failed to update product with ID ${String(id)}: ${error.message} - ${JSON.stringify(record)}`)
+          } else {
+            productId = data?.id || String(id)
+            updatedCount++
+          }
+        } else if (id) {
           // Attempt to update existing product
           const { data, error } = await supabase.from("products").update(productData).eq("id", id).select().single()
 
@@ -194,10 +228,12 @@ export async function POST(request: Request) {
                     o.sort_order === null || o.sort_order === undefined || String(o.sort_order).trim() === ""
                       ? null
                       : Number.parseInt(String(o.sort_order), 10)
+                  const tierPricing = o.tier_pricing ?? o.tierPricing ?? null
                   return {
                     group_id: insertedGroup.id,
                     label: String(label),
                     price_modifier: Number.isFinite(priceModifier) ? priceModifier : 0,
+                    tier_pricing: tierPricing,
                     is_available: isAvailable,
                     sort_order: Number.isFinite(optionSortOrder as any) ? optionSortOrder : null,
                   }

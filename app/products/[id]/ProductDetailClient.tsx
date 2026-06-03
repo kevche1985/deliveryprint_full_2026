@@ -47,6 +47,7 @@ export type ProductDetail = {
 
 type PricingTier = {
   quantity: number
+  maxQuantity?: number
   price: number
 }
 
@@ -57,10 +58,30 @@ function normalizeTiers(raw: any): PricingTier[] {
   return (src as any[])
     .map((t) => ({
       quantity: Number.parseInt(String(t?.quantity ?? t?.qty ?? ""), 10),
+      maxQuantity: Number.isFinite(Number.parseInt(String(t?.maxQuantity ?? t?.max_quantity ?? ""), 10))
+        ? Number.parseInt(String(t?.maxQuantity ?? t?.max_quantity ?? ""), 10)
+        : undefined,
       price: Number.parseFloat(String(t?.price ?? "")),
     }))
     .filter((t) => Number.isFinite(t.quantity) && t.quantity > 0 && Number.isFinite(t.price) && t.price >= 0)
     .sort((a, b) => a.quantity - b.quantity)
+}
+
+function getTierMode(raw: any, tiers: PricingTier[]): "range" | "quantity" {
+  if (raw && typeof raw === "object" && !Array.isArray(raw) && (raw as any).tier_mode === "range") return "range"
+  return tiers.some((t) => typeof t.maxQuantity === "number" && Number.isFinite(t.maxQuantity)) ? "range" : "quantity"
+}
+
+function findTierForQuantity(tiers: PricingTier[], qty: number): PricingTier | null {
+  if (!tiers.length) return null
+  const sorted = tiers.slice().sort((a, b) => a.quantity - b.quantity)
+  for (let i = sorted.length - 1; i >= 0; i--) {
+    const t = sorted[i]
+    if (qty < t.quantity) continue
+    if (t.maxQuantity != null && Number.isFinite(t.maxQuantity) && qty > t.maxQuantity) continue
+    return t
+  }
+  return null
 }
 
 export type ProductMedia = {
@@ -99,13 +120,15 @@ function resolvePrice(
   return Math.max(...selectedPrices)
 }
 
-function getModifierForQty(option: ProductVariantOption | undefined, qty: number | null): number {
-  if (!option) return 0
+function getModifierForQty(option: ProductVariantOption | undefined, qty: number | null): number | null {
+  if (!option) return null
   if (qty == null) return option.price_modifier ?? 0
   const tiers = normalizeTiers(option.tier_pricing)
-  if (tiers.length === 0) return option.price_modifier ?? 0
-  const match = tiers.find((t) => t.quantity === qty)
-  return match ? match.price : 0
+  if (tiers.length === 0) return (option.price_modifier ?? 0) * qty
+  const match = findTierForQuantity(tiers, qty)
+  if (!match) return null
+  const mode = getTierMode(option.tier_pricing, tiers)
+  return mode === "range" ? match.price * qty : match.price
 }
 
 function resolvePriceForQty(
@@ -118,7 +141,7 @@ function resolvePriceForQty(
     return variantGroups.reduce((sum, group) => {
       const selectedOptionId = selectedOptions[group.id]
       const option = group.options.find((o) => o.id === selectedOptionId)
-      return sum + getModifierForQty(option, qty)
+      return sum + (getModifierForQty(option, qty) ?? 0)
     }, 0)
   }
 
@@ -180,12 +203,19 @@ export default function ProductDetailClient({
     return "add"
   }, [product.wholesaleTiers])
 
+  const variantTierStack = useMemo(() => {
+    const raw = product.wholesaleTiers
+    return !!(raw && typeof raw === "object" && !Array.isArray(raw) && (raw as any).variant_tier_stack === true)
+  }, [product.wholesaleTiers])
+
   const variantTierQuantities = useMemo(() => {
     const qtySet = new Set<number>()
     variantGroups.forEach((group) => {
       const selectedOptionId = selectedOptions[group.id]
       const option = group.options.find((o) => o.id === selectedOptionId)
       const tiers = normalizeTiers(option?.tier_pricing)
+      const mode = getTierMode(option?.tier_pricing, tiers)
+      if (mode === "range") return
       tiers.forEach((t) => qtySet.add(t.quantity))
     })
     return Array.from(qtySet).sort((a, b) => a - b)
@@ -193,59 +223,112 @@ export default function ProductDetailClient({
 
   const legacyTiers = useMemo(() => normalizeTiers(product.wholesaleTiers), [product.wholesaleTiers])
 
+  const rangeTierMode = useMemo(() => {
+    const raw = product.wholesaleTiers
+    if (raw && typeof raw === "object" && !Array.isArray(raw) && (raw as any).tier_mode === "range") return true
+    if (legacyTiers.some((t) => typeof t.maxQuantity === "number" && Number.isFinite(t.maxQuantity))) return true
+    for (const group of variantGroups) {
+      const selectedOptionId = selectedOptions[group.id]
+      const option = group.options.find((o) => o.id === selectedOptionId)
+      const tiers = normalizeTiers(option?.tier_pricing)
+      const mode = getTierMode(option?.tier_pricing, tiers)
+      if (mode === "range" && tiers.length > 0) return true
+    }
+    return false
+  }, [product.wholesaleTiers, legacyTiers, variantGroups, selectedOptions])
+
   const tierQuantities = useMemo(() => {
+    if (rangeTierMode) return []
     if (variantTierQuantities.length > 0) return variantTierQuantities
     return legacyTiers.map((t) => t.quantity)
-  }, [variantTierQuantities, legacyTiers])
+  }, [rangeTierMode, variantTierQuantities, legacyTiers])
 
-  const tierMode = tierQuantities.length > 0
+  const discreteTierMode = tierQuantities.length > 0
+  const tierMode = rangeTierMode || discreteTierMode
   const [selectedTierQty, setSelectedTierQty] = useState(() => tierQuantities[0] ?? 1)
 
   useEffect(() => {
-    if (!tierMode) return
+    if (!discreteTierMode) return
     if (tierQuantities.length === 0) return
     if (tierQuantities.includes(selectedTierQty)) return
     setSelectedTierQty(tierQuantities[0])
-  }, [tierMode, tierQuantities, selectedTierQty])
+  }, [discreteTierMode, tierQuantities, selectedTierQty])
 
   const computeTierTotal = useMemo(() => {
     return (qty: number) => {
-      if (variantTierQuantities.length > 0) {
-        return resolvePriceForQty(variantGroups, selectedOptions, variantPriceMode, qty)
-      }
-      const tier = legacyTiers.find((t) => t.quantity === qty)
-      const base = tier ? tier.price : 0
-      const modifiers = variantGroups
+      const selectedOptionsList = variantGroups
         .map((group) => {
           const selectedOptionId = selectedOptions[group.id]
-          const option = group.options.find((o) => o.id === selectedOptionId)
-          return option?.price_modifier ?? 0
+          return group.options.find((o) => o.id === selectedOptionId)
         })
-        .filter((v): v is number => typeof v === "number" && Number.isFinite(v))
-      if (variantPriceMode === "add") {
-        return base + modifiers.reduce((a, b) => a + b, 0)
+        .filter((o): o is ProductVariantOption => !!o)
+
+      if (variantTierStack) {
+        const tierTotals = selectedOptionsList
+          .filter((o) => normalizeTiers(o.tier_pricing).length > 0)
+          .map((o) => getModifierForQty(o, qty))
+          .filter((v): v is number => typeof v === "number" && Number.isFinite(v))
+
+        if (tierTotals.length > 0) {
+          const base = variantPriceMode === "add" ? tierTotals.reduce((a, b) => a + b, 0) : Math.max(...tierTotals)
+          const modifiers = selectedOptionsList
+            .filter((o) => normalizeTiers(o.tier_pricing).length === 0)
+            .reduce((sum, o) => sum + (o.price_modifier ?? 0) * qty, 0)
+          return base + modifiers
+        }
       }
-      return Math.max(base, modifiers.length ? Math.max(...modifiers) : 0)
+
+      const tier = findTierForQuantity(legacyTiers, qty)
+      const productRange = getTierMode(product.wholesaleTiers, legacyTiers) === "range"
+      const baseTotal = tier ? (productRange ? tier.price * qty : tier.price) : product.price * qty
+
+      const variantTotal =
+        variantTierQuantities.length > 0 || variantGroups.some((g) => normalizeTiers(g.options.find((o) => o.id === selectedOptions[g.id])?.tier_pricing).length > 0)
+          ? resolvePriceForQty(variantGroups, selectedOptions, variantPriceMode, qty)
+          : (() => {
+              const mods = variantGroups
+                .map((group) => {
+                  const selectedOptionId = selectedOptions[group.id]
+                  const option = group.options.find((o) => o.id === selectedOptionId)
+                  return option?.price_modifier ?? 0
+                })
+                .filter((v): v is number => typeof v === "number" && Number.isFinite(v))
+              if (variantPriceMode === "add") return mods.reduce((a, b) => a + b, 0)
+              return mods.length ? Math.max(...mods) : 0
+            })()
+
+      if (variantPriceMode === "add") return baseTotal + variantTotal
+      return variantTotal ? variantTotal : baseTotal
     }
-  }, [variantTierQuantities.length, variantGroups, selectedOptions, variantPriceMode, legacyTiers, product.price])
+  }, [
+    variantTierStack,
+    variantTierQuantities.length,
+    variantGroups,
+    selectedOptions,
+    variantPriceMode,
+    legacyTiers,
+    product.price,
+    product.wholesaleTiers,
+  ])
+
+  const effectiveQuantity = rangeTierMode ? quantity : discreteTierMode ? selectedTierQty : quantity
 
   const totalPrice = useMemo(() => {
-    if (tierMode) return computeTierTotal(selectedTierQty)
+    if (tierMode) return computeTierTotal(effectiveQuantity)
     const unit = resolvePrice(product.price, variantGroups, selectedOptions, variantPriceMode)
     return unit * quantity
-  }, [tierMode, computeTierTotal, selectedTierQty, product.price, variantGroups, selectedOptions, variantPriceMode, quantity])
+  }, [tierMode, computeTierTotal, effectiveQuantity, product.price, variantGroups, selectedOptions, variantPriceMode, quantity])
 
   const unitPrice = useMemo(() => {
     if (tierMode) return null
     return resolvePrice(product.price, variantGroups, selectedOptions, variantPriceMode)
   }, [tierMode, product.price, variantGroups, selectedOptions, variantPriceMode])
 
-  const effectiveQuantity = tierMode ? selectedTierQty : quantity
   const unitPriceForCart = useMemo(() => {
     if (!tierMode) return unitPrice as number
-    if (!selectedTierQty) return 0
-    return totalPrice / selectedTierQty
-  }, [tierMode, unitPrice, totalPrice, selectedTierQty])
+    if (!effectiveQuantity) return 0
+    return totalPrice / effectiveQuantity
+  }, [tierMode, unitPrice, totalPrice, effectiveQuantity])
 
   const mainMediaUrl = media[0]?.url || "/placeholder.svg"
 
@@ -268,6 +351,13 @@ export default function ProductDetailClient({
     setIsAdding(true)
     try {
       const doneUploads = uploadedFiles.filter((f) => f.status === "done" && f.storagePath)
+      const variantModifiers = variantGroups
+        .map((group) => {
+          const selectedOptionId = selectedOptions[group.id]
+          const option = group.options.find((o) => o.id === selectedOptionId)
+          return option?.price_modifier
+        })
+        .filter((v): v is number => typeof v === "number" && Number.isFinite(v))
       addItem({
         productId: product.id,
         quantity: effectiveQuantity,
@@ -276,7 +366,21 @@ export default function ProductDetailClient({
         image: mainMediaUrl,
         customizations: {
           selectedOptions,
-          tier: tierMode ? { quantity: selectedTierQty, price: totalPrice } : null,
+          tier: tierMode
+            ? {
+                mode: rangeTierMode ? "range" : "quantity",
+                quantity: effectiveQuantity,
+                price: totalPrice,
+                ...(rangeTierMode
+                  ? {
+                      wholesaleTiers: product.wholesaleTiers ?? null,
+                      basePrice: product.price,
+                      variantPriceMode,
+                      variantModifiers,
+                    }
+                  : {}),
+              }
+            : null,
           uploadedFiles: doneUploads.map((f) => ({
             id: f.orderFileId,
             path: f.storagePath,
@@ -309,10 +413,10 @@ export default function ProductDetailClient({
           <PriceDisplay
             totalPrice={totalPrice}
             unitPrice={unitPrice}
-            contextLine={tierMode ? `${t("product.quantity_label")}: ${selectedTierQty}` : null}
+            contextLine={tierMode ? `${t("product.quantity_label")}: ${effectiveQuantity}` : null}
           />
 
-          {tierMode ? (
+          {discreteTierMode ? (
             <div className="space-y-2">
               <label className="text-sm font-medium text-gray-900">{t("product.quantity_label")}</label>
               <Select value={String(selectedTierQty)} onValueChange={(val) => setSelectedTierQty(Number.parseInt(val, 10))}>
@@ -375,7 +479,7 @@ export default function ProductDetailClient({
             />
           ) : null}
 
-          {!tierMode ? <QuantityStepper value={quantity} onChange={setQuantity} /> : null}
+          {!discreteTierMode ? <QuantityStepper value={quantity} onChange={setQuantity} /> : null}
 
           <Button className="w-full bg-[#8B0000] hover:bg-[#6B0000]" onClick={handleAddToCart} disabled={isAdding}>
             <ShoppingCart className="mr-2 h-4 w-4" />

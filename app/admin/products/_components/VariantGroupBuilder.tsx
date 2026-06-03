@@ -115,28 +115,58 @@ export default function VariantGroupBuilder({
     return (src as any[])
       .map((t) => ({
         quantity: Number.parseInt(String(t?.quantity ?? t?.qty ?? ""), 10),
+        maxQuantity:
+          t?.maxQuantity != null
+            ? Number.parseInt(String(t.maxQuantity), 10)
+            : t?.max_quantity != null
+              ? Number.parseInt(String(t.max_quantity), 10)
+              : undefined,
         price: Number.parseFloat(String(t?.price ?? "")),
       }))
       .filter((t) => Number.isFinite(t.quantity) && t.quantity > 0 && Number.isFinite(t.price) && t.price >= 0)
       .sort((a, b) => a.quantity - b.quantity)
   }
 
-  const setTierRow = (groupId: string, optionId: string, index: number, patch: { quantity?: string; price?: string }) => {
+  const getTierMode = (raw: any) => {
+    if (raw && typeof raw === "object" && !Array.isArray(raw) && (raw as any).tier_mode === "range") return "range"
+    const tiers = normalizeTierPricing(raw)
+    return tiers.some((t: any) => typeof t.maxQuantity === "number" && Number.isFinite(t.maxQuantity)) ? "range" : "quantity"
+  }
+
+  const setTierMode = (groupId: string, optionId: string, mode: "quantity" | "range") => {
     const group = groups.find((g) => g.id === groupId)
     if (!group) return
     const opt = group.options.find((o) => o.id === optionId)
     if (!opt) return
     const tiers = normalizeTierPricing(opt.tierPricing)
+    updateOption(groupId, optionId, { tierPricing: { mode: "tiers", tier_mode: mode, tiers } })
+  }
+
+  const setTierRow = (
+    groupId: string,
+    optionId: string,
+    index: number,
+    patch: { quantity?: string; maxQuantity?: string; price?: string },
+  ) => {
+    const group = groups.find((g) => g.id === groupId)
+    if (!group) return
+    const opt = group.options.find((o) => o.id === optionId)
+    if (!opt) return
+    const tiers = normalizeTierPricing(opt.tierPricing)
+    const tierMode = getTierMode(opt.tierPricing)
     const next = tiers.map((t, i) => {
       if (i !== index) return t
       const nextQty = patch.quantity != null ? Number.parseInt(String(patch.quantity), 10) : t.quantity
+      const nextMax =
+        tierMode === "range" && patch.maxQuantity != null ? Number.parseInt(String(patch.maxQuantity), 10) : t.maxQuantity
       const nextPrice = patch.price != null ? Number.parseFloat(String(patch.price)) : t.price
       return {
         quantity: Number.isFinite(nextQty) ? nextQty : t.quantity,
+        maxQuantity: tierMode === "range" ? (Number.isFinite(nextMax as any) ? nextMax : undefined) : undefined,
         price: Number.isFinite(nextPrice) ? nextPrice : t.price,
       }
     })
-    updateOption(groupId, optionId, { tierPricing: { mode: "tiers", tiers: next } })
+    updateOption(groupId, optionId, { tierPricing: { mode: "tiers", tier_mode: tierMode, tiers: next } })
   }
 
   const addTierRow = (groupId: string, optionId: string) => {
@@ -145,10 +175,11 @@ export default function VariantGroupBuilder({
     const opt = group.options.find((o) => o.id === optionId)
     if (!opt) return
     const tiers = normalizeTierPricing(opt.tierPricing)
+    const tierMode = getTierMode(opt.tierPricing)
     const lastQty = tiers[tiers.length - 1]?.quantity
     const nextQty = typeof lastQty === "number" && Number.isFinite(lastQty) ? lastQty + 1 : 1
-    const next = [...tiers, { quantity: nextQty, price: 0 }]
-    updateOption(groupId, optionId, { tierPricing: { mode: "tiers", tiers: next } })
+    const next = [...tiers, { quantity: nextQty, maxQuantity: undefined, price: 0 }]
+    updateOption(groupId, optionId, { tierPricing: { mode: "tiers", tier_mode: tierMode, tiers: next } })
     setExpandedOptions((p) => ({ ...p, [optionId]: true }))
   }
 
@@ -159,7 +190,8 @@ export default function VariantGroupBuilder({
     if (!opt) return
     const tiers = normalizeTierPricing(opt.tierPricing)
     const next = tiers.filter((_, i) => i !== index)
-    updateOption(groupId, optionId, { tierPricing: next.length ? { mode: "tiers", tiers: next } : null })
+    const tierMode = getTierMode(opt.tierPricing)
+    updateOption(groupId, optionId, { tierPricing: next.length ? { mode: "tiers", tier_mode: tierMode, tiers: next } : null })
   }
 
   const toggleTierPricing = (groupId: string, optionId: string, enabled: boolean) => {
@@ -167,7 +199,7 @@ export default function VariantGroupBuilder({
       updateOption(groupId, optionId, { tierPricing: null })
       return
     }
-    updateOption(groupId, optionId, { tierPricing: { mode: "tiers", tiers: [{ quantity: 70, price: 0 }] } })
+    updateOption(groupId, optionId, { tierPricing: { mode: "tiers", tier_mode: "quantity", tiers: [{ quantity: 1, price: 0 }] } })
     setExpandedOptions((p) => ({ ...p, [optionId]: true }))
   }
 
@@ -345,16 +377,44 @@ export default function VariantGroupBuilder({
                                 <TableCell colSpan={6}>
                                   <div className="space-y-3 rounded-md border border-gray-200 bg-gray-50 p-3">
                                     <div className="flex items-center justify-between">
-                                      <p className="text-sm font-medium text-gray-900">Tier prices (total)</p>
+                                      <p className="text-sm font-medium text-gray-900">
+                                        {getTierMode(opt.tierPricing) === "range" ? "Tier prices (unit)" : "Tier prices (total)"}
+                                      </p>
                                       <Button type="button" variant="outline" size="sm" onClick={() => addTierRow(group.id, opt.id)} disabled={disabled}>
                                         <Plus className="mr-2 h-4 w-4" />
                                         Add tier
                                       </Button>
                                     </div>
+                                    <div className="flex items-center gap-3">
+                                      <p className="text-sm text-gray-700">Tier type</p>
+                                      <div className="w-[200px]">
+                                        <RadioGroup
+                                          value={getTierMode(opt.tierPricing)}
+                                          onValueChange={(v) => setTierMode(group.id, opt.id, v as "quantity" | "range")}
+                                          className="flex items-center gap-4"
+                                        >
+                                          <div className="flex items-center gap-2">
+                                            <RadioGroupItem value="quantity" id={`${opt.id}-tier-qty`} disabled={disabled} />
+                                            <Label htmlFor={`${opt.id}-tier-qty`}>Quantity</Label>
+                                          </div>
+                                          <div className="flex items-center gap-2">
+                                            <RadioGroupItem value="range" id={`${opt.id}-tier-range`} disabled={disabled} />
+                                            <Label htmlFor={`${opt.id}-tier-range`}>Range</Label>
+                                          </div>
+                                        </RadioGroup>
+                                      </div>
+                                    </div>
                                     <div className="grid gap-2">
                                       {normalizeTierPricing(opt.tierPricing).map((tier: any, idx: number) => (
-                                        <div key={`${opt.id}-tier-${idx}`} className="grid grid-cols-1 gap-2 md:grid-cols-6">
-                                          <div className="md:col-span-2">
+                                        <div
+                                          key={`${opt.id}-tier-${idx}`}
+                                          className={
+                                            getTierMode(opt.tierPricing) === "range"
+                                              ? "grid grid-cols-1 gap-2 md:grid-cols-9"
+                                              : "grid grid-cols-1 gap-2 md:grid-cols-6"
+                                          }
+                                        >
+                                          <div className={getTierMode(opt.tierPricing) === "range" ? "md:col-span-2" : "md:col-span-2"}>
                                             <Input
                                               type="number"
                                               value={String(tier.quantity)}
@@ -363,7 +423,18 @@ export default function VariantGroupBuilder({
                                               className="h-9"
                                             />
                                           </div>
-                                          <div className="md:col-span-3">
+                                          {getTierMode(opt.tierPricing) === "range" ? (
+                                            <div className="md:col-span-2">
+                                              <Input
+                                                type="number"
+                                                value={tier.maxQuantity != null ? String(tier.maxQuantity) : ""}
+                                                onChange={(e) => setTierRow(group.id, opt.id, idx, { maxQuantity: e.target.value })}
+                                                disabled={disabled}
+                                                className="h-9"
+                                              />
+                                            </div>
+                                          ) : null}
+                                          <div className={getTierMode(opt.tierPricing) === "range" ? "md:col-span-4" : "md:col-span-3"}>
                                             <Input
                                               type="number"
                                               step="0.01"
