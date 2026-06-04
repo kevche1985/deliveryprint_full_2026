@@ -48,6 +48,7 @@ type Product = {
   specifications: any | null
   shipping_info: string | null
   wholesale_tiers: any | null
+  price_disclaimer: string | null
   rating: number | null
   review_count: number | null
   created_at: string
@@ -96,6 +97,7 @@ export default function ProductManagement() {
     accepts_uploads: false,
     is_customizable: false,
     shipping_info: "",
+    price_disclaimer: "",
     pricing_mode: "quantity" as "quantity" | "tiers",
     tier_mode: "quantity" as "quantity" | "range",
     variant_price_mode: "add" as "add" | "override",
@@ -374,6 +376,7 @@ export default function ProductManagement() {
         is_customizable: formData.is_customizable,
         specifications: cleanedSpecs.length > 0 ? cleanedSpecs : null,
         shipping_info: formData.shipping_info || null,
+        price_disclaimer: formData.price_disclaimer.trim() ? formData.price_disclaimer.trim() : null,
         wholesale_tiers: wholesaleTiersJson,
         rating: Number.isFinite(ratingNum) ? ratingNum : null,
         review_count: Number.isFinite(reviewCountNum) ? reviewCountNum : null,
@@ -542,6 +545,7 @@ export default function ProductManagement() {
       accepts_uploads: product.accepts_uploads ?? false,
       is_customizable: product.is_customizable ?? false,
       shipping_info: product.shipping_info || "",
+      price_disclaimer: product.price_disclaimer || "",
       pricing_mode: mode,
       tier_mode: tierMode,
       variant_price_mode: variantMode,
@@ -572,6 +576,7 @@ export default function ProductManagement() {
       accepts_uploads: false,
       is_customizable: false,
       shipping_info: "",
+      price_disclaimer: "",
       pricing_mode: "quantity",
       tier_mode: "quantity",
       variant_price_mode: "add",
@@ -913,6 +918,17 @@ export default function ProductManagement() {
                       value={formData.description}
                       onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                       rows={4}
+                      disabled={isSaving}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="price_disclaimer">Price disclaimer (shown under the price)</Label>
+                    <Textarea
+                      id="price_disclaimer"
+                      value={formData.price_disclaimer}
+                      onChange={(e) => setFormData({ ...formData, price_disclaimer: e.target.value })}
+                      rows={2}
                       disabled={isSaving}
                     />
                   </div>

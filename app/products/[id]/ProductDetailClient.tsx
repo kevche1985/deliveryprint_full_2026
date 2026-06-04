@@ -39,6 +39,7 @@ export type ProductDetail = {
   description: string | null
   price: number
   wholesaleTiers?: any | null
+  priceDisclaimer?: string | null
   acceptsUploads: boolean
   isCustomizable: boolean
   specifications: any | null
@@ -414,6 +415,7 @@ export default function ProductDetailClient({
             totalPrice={totalPrice}
             unitPrice={unitPrice}
             contextLine={tierMode ? `${t("product.quantity_label")}: ${effectiveQuantity}` : null}
+            disclaimer={product.priceDisclaimer ?? null}
           />
 
           {discreteTierMode ? (

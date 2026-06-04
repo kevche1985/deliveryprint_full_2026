@@ -6,12 +6,19 @@ export default function PriceDisplay({
   totalPrice,
   unitPrice,
   contextLine,
+  disclaimer,
 }: {
   totalPrice: number
   unitPrice?: number | null
   contextLine?: string | null
+  disclaimer?: string | null
 }) {
   const { t } = useLanguage()
+  const baseDisclaimer = disclaimer?.trim() ? disclaimer.trim() : t("product.price_disclaimer")
+  const resolvedDisclaimer =
+    (baseDisclaimer.startsWith('"') && baseDisclaimer.endsWith('"')) || (baseDisclaimer.startsWith("“") && baseDisclaimer.endsWith("”"))
+      ? baseDisclaimer.slice(1, -1).trim()
+      : baseDisclaimer
   return (
     <div className="space-y-1">
       <div className="flex items-end gap-3">
@@ -25,7 +32,7 @@ export default function PriceDisplay({
           {t("product.fromLabel")} ${unitPrice.toFixed(2)} {t("product.eachLabel")}
         </p>
       ) : null}
-      <p className="text-xs text-gray-500">{t("product.price_disclaimer")}</p>
+      <p className="text-xs text-gray-500 whitespace-pre-line leading-relaxed">{resolvedDisclaimer}</p>
     </div>
   )
 }

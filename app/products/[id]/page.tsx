@@ -37,6 +37,7 @@ type ProductRow = {
   description: string | null
   price: number
   wholesale_tiers: any | null
+  price_disclaimer?: string | null
   accepts_uploads: boolean | null
   is_customizable: boolean | null
   specifications: any | null
@@ -50,17 +51,7 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
     .from("products")
     .select(
       `
-      id,
-      name,
-      image,
-      short_description,
-      description,
-      price,
-      wholesale_tiers,
-      accepts_uploads,
-      is_customizable,
-      specifications,
-      shipping_info,
+      *,
       product_media ( id, storage_path, type, alt_text, sort_order ),
       product_variant_groups (
         id,
@@ -134,6 +125,7 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
         description: product.description,
         price: Number(product.price ?? 0),
         wholesaleTiers: product.wholesale_tiers,
+        priceDisclaimer: product.price_disclaimer,
         acceptsUploads: product.accepts_uploads ?? true,
         isCustomizable: product.is_customizable ?? false,
         specifications: product.specifications,
