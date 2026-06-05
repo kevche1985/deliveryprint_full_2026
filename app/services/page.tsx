@@ -93,6 +93,22 @@ export default function ServicesPage() {
         if (error) throw error
         
         if (data && data.length > 0) {
+          const ids = data.map((s: any) => s.id).filter(Boolean)
+          const { data: imagesData } =
+            ids.length > 0
+              ? await supabase
+                  .from("service_images")
+                  .select("service_id, url, sort_order")
+                  .in("service_id", ids)
+                  .order("sort_order", { ascending: true })
+              : { data: [] as any[] }
+
+          const primaryImages: Record<string, string> = {}
+          for (const img of imagesData || []) {
+            const sid = String((img as any).service_id)
+            if (!primaryImages[sid]) primaryImages[sid] = String((img as any).url || "")
+          }
+
           const mapped = data.map((s) => ({
             id: s.slug || s.id,
             title: s.name,
@@ -102,7 +118,7 @@ export default function ServicesPage() {
             features: [],
             priceRange: s.price ? `$${Number(s.price).toFixed(2)}+` : t("services.page.startingFrom"),
             turnaround: t("services.page.turnaroundDefault"),
-            image: s.image || "/placeholder.svg?height=200&width=300",
+            image: primaryImages[String(s.id)] || s.image || "/placeholder.svg?height=200&width=300",
           }))
           setServices(mapped)
         } else {

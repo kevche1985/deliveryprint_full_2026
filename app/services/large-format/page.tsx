@@ -1,11 +1,12 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Separator } from "@/components/ui/separator"
 import { ShoppingCart, Ruler, FileImage, Calculator, Info, Palette, X } from "lucide-react"
@@ -16,8 +17,47 @@ import QuoteRequestModal from "@/components/quote-request-modal"
 import { useLanguage } from "@/lib/language-context"
 import { useRouter } from "next/navigation"
 import FastTrackCheckoutModal from "@/components/fast-track-checkout-modal"
+import { supabase } from "@/lib/supabase"
 
-const largeFormatProducts = [
+type VariantOption = {
+  id: string
+  label: string
+  priceDelta: number
+  skuSuffix: string | null
+  sortOrder: number
+  isActive: boolean
+}
+
+type VariantGroup = {
+  id: string
+  name: string
+  sortOrder: number
+  options: VariantOption[]
+}
+
+type LargeFormatProduct = {
+  id: string
+  name: string
+  description: string
+  baseSize: { width: number; height: number; unit: string }
+  price: number
+  priceUnit: string
+  customSize: boolean
+  weatherResistant: boolean
+  image: string
+  areaPricing: boolean
+}
+
+function slugify(input: string) {
+  return input
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+/, "")
+    .replace(/-+$/, "")
+}
+
+const defaultLargeFormatProducts: LargeFormatProduct[] = [
   {
     id: "banner",
     name: "BANNER",
@@ -28,6 +68,7 @@ const largeFormatProducts = [
     customSize: true,
     weatherResistant: true,
     image: "https://dzlqddocovzijnfwygap.supabase.co/storage/v1/object/public/web-images//Banner.png?height=200&width=300",
+    areaPricing: true,
   },
   {
     id: "troquelados",
@@ -39,13 +80,18 @@ const largeFormatProducts = [
     customSize: false,
     weatherResistant: false,
     image: "https://dzlqddocovzijnfwygap.supabase.co/storage/v1/object/public/web-images//TARJETAS%20TROQUELADAS.jpg?height=200&width=300",
+    areaPricing: false,
   },
 ]
 
 export default function LargeFormatPage() {
   const { t } = useLanguage()
   const router = useRouter()
-  const [selectedProduct, setSelectedProduct] = useState(largeFormatProducts[0])
+  const [serviceMeta, setServiceMeta] = useState<{ name: string; description: string | null } | null>(null)
+  const [products, setProducts] = useState<LargeFormatProduct[]>(defaultLargeFormatProducts)
+  const [selectedProduct, setSelectedProduct] = useState(defaultLargeFormatProducts[0])
+  const [addonVariants, setAddonVariants] = useState<VariantGroup[]>([])
+  const [selectedVariantOptions, setSelectedVariantOptions] = useState<Record<string, string>>({})
   const [customWidth, setCustomWidth] = useState(selectedProduct.baseSize.width)
   const [customHeight, setCustomHeight] = useState(selectedProduct.baseSize.height)
   const [quantity, setQuantity] = useState(1)
@@ -61,6 +107,21 @@ export default function LargeFormatPage() {
 
   const { addItem } = useCart()
 
+  const getPriceUnitLabel = useCallback(
+    (areaPricing: boolean) => {
+      return areaPricing ? t("services.largeFormatPage.products.banner.priceUnit") : t("services.largeFormatPage.products.troquelados.priceUnit")
+    },
+    [t],
+  )
+
+  const addonsUnitDelta = addonVariants.reduce((sum, v) => {
+    const chosen = selectedVariantOptions[v.id]
+    const opt = v.options.find((o) => o.id === chosen) || v.options.find((o) => o.isActive)
+    return sum + Number(opt?.priceDelta ?? 0)
+  }, 0)
+
+  const unitPriceWithAddons = selectedProduct.price + addonsUnitDelta
+
   const handleAddToCart = () => {
     const cartItem = {
       productId: `large-format-${selectedProduct.id}`,
@@ -68,7 +129,7 @@ export default function LargeFormatPage() {
       designId: (customDesign as any)?.design_id || (customDesign as any)?.id || undefined,
       quantity: quantity,
       price: calculatePrice(),
-      name: `${t(`services.largeFormatPage.products.${selectedProduct.id}.name`)} - ${customWidth}x${customHeight} ${t(`services.largeFormatPage.products.${selectedProduct.id}.unit`)}`,
+      name: `${selectedProduct.name} - ${customWidth}x${customHeight} ${selectedProduct.baseSize.unit}`,
       image:
         (customDesign as any)?.customizedProductImage ||
         (customDesign as any)?.thumbnail_jpeg ||
@@ -79,6 +140,17 @@ export default function LargeFormatPage() {
         "/placeholder.svg?height=200&width=300",
       customizations: {
         product: selectedProduct,
+        selectedVariants: addonVariants.map((v) => {
+          const chosen = selectedVariantOptions[v.id]
+          const opt = v.options.find((o) => o.id === chosen) || null
+          return {
+            variantId: v.id,
+            variantName: v.name,
+            optionId: opt?.id || "",
+            optionLabel: opt?.label || "",
+            priceDelta: Number(opt?.priceDelta ?? 0),
+          }
+        }),
         width: customWidth,
         height: customHeight,
         quantity: quantity,
@@ -92,15 +164,15 @@ export default function LargeFormatPage() {
             }
           : undefined,
         specifications: {
-          material: t(`services.largeFormatPage.products.${selectedProduct.id}.name`),
-          dimensions: `${customWidth} × ${customHeight} ${t(`services.largeFormatPage.products.${selectedProduct.id}.unit`)}`,
+          material: selectedProduct.name,
+          dimensions: `${customWidth} × ${customHeight} ${selectedProduct.baseSize.unit}`,
           area: calculateArea(),
         },
       },
     }
 
     addItem(cartItem)
-    alert(`${t("common.toast.addedToCartTitle")}: ${t(`services.largeFormatPage.products.${selectedProduct.id}.name`)}`)
+    alert(`${t("common.toast.addedToCartTitle")}: ${selectedProduct.name}`)
   }
 
   const handleFastCheckout = async () => {
@@ -109,16 +181,15 @@ export default function LargeFormatPage() {
   }
 
   const calculatePrice = () => {
-    if (selectedProduct.id === "banner") {
+    if (selectedProduct.areaPricing) {
       const area = customWidth * customHeight
-      return area * selectedProduct.price * quantity
-    } else {
-      return selectedProduct.price * quantity
+      return area * unitPriceWithAddons * quantity
     }
+    return unitPriceWithAddons * quantity
   }
 
   const calculateArea = () => {
-    if (selectedProduct.id === "banner") {
+    if (selectedProduct.areaPricing) {
       return customWidth * customHeight
     }
     return null
@@ -141,13 +212,124 @@ export default function LargeFormatPage() {
     }
   }, [])
 
+  useEffect(() => {
+    const loadConfig = async () => {
+      const { data: svc, error: svcError } = await supabase
+        .from("services")
+        .select("id, name, description")
+        .eq("slug", "large-format")
+        .eq("is_active", true)
+        .maybeSingle()
+      if (svcError || !svc?.id) return
+
+      setServiceMeta({ name: svc.name, description: svc.description ?? null })
+
+      const { data: productRows } = await supabase.from("service_products").select("*").eq("service_id", svc.id).order("sort_order", { ascending: true })
+      const productsData = (productRows || []) as any[]
+      if (productsData.length === 0) return
+
+      const productIds = productsData.map((p) => String(p.id)).filter(Boolean)
+      const { data: imgRows } = await supabase
+        .from("service_product_images")
+        .select("product_id, url, sort_order")
+        .in("product_id", productIds)
+        .order("sort_order", { ascending: true })
+
+      const primaryByProduct: Record<string, string> = {}
+      for (const r of imgRows || []) {
+        const pid = String((r as any).product_id)
+        if (!primaryByProduct[pid]) primaryByProduct[pid] = String((r as any).url || "")
+      }
+
+      const nextProducts: LargeFormatProduct[] = productsData.map((p, idx) => {
+        const cfg = (p as any).config || {}
+        const fallback = defaultLargeFormatProducts[idx] || defaultLargeFormatProducts[0]
+        const baseSize = cfg?.baseSize && typeof cfg.baseSize === "object" ? cfg.baseSize : fallback.baseSize
+        const areaPricing = Boolean(cfg?.areaPricing ?? cfg?.isAreaPricing ?? fallback.areaPricing)
+        const priceUnit = typeof cfg?.priceUnit === "string" ? cfg.priceUnit : fallback.priceUnit
+        const customSize = Boolean(cfg?.customSize ?? areaPricing)
+        const weatherResistant = Boolean(cfg?.weatherResistant ?? areaPricing)
+        const image = primaryByProduct[String((p as any).id)] || fallback.image
+
+        return {
+          id: String((p as any).id),
+          name: String((p as any).name || fallback.name),
+          description: String((p as any).description || fallback.description),
+          baseSize,
+          price: Number((p as any).base_price ?? 0),
+          priceUnit,
+          customSize,
+          weatherResistant,
+          image,
+          areaPricing,
+        }
+      })
+
+      setProducts(nextProducts)
+
+      const chosen = nextProducts[0]
+      if (chosen) {
+        setSelectedProduct(chosen)
+        setCustomWidth(Number(chosen.baseSize.width) || 1)
+        setCustomHeight(Number(chosen.baseSize.height) || 1)
+      }
+    }
+
+    loadConfig().catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    const productId = selectedProduct?.id
+    if (!productId) return
+
+    const loadProductVariants = async () => {
+      const { data } = await supabase
+        .from("service_product_variants")
+        .select("id, name, sort_order, options:service_product_variant_options(id, label, price_delta, sku_suffix, sort_order, is_active)")
+        .eq("product_id", productId)
+        .order("sort_order", { ascending: true })
+
+      const variants: VariantGroup[] = (data || [])
+        .slice()
+        .map((v: any, idx: number) => ({
+          id: String(v.id),
+          name: String(v.name || ""),
+          sortOrder: Number(v.sort_order ?? idx),
+          options: ((v.options || []) as any[])
+            .slice()
+            .map((o: any, oIdx: number) => ({
+              id: String(o.id),
+              label: String(o.label || ""),
+              priceDelta: Number(o.price_delta ?? 0),
+              skuSuffix: o.sku_suffix ?? null,
+              sortOrder: Number(o.sort_order ?? oIdx),
+              isActive: o.is_active ?? true,
+            }))
+            .sort((a, b) => a.sortOrder - b.sortOrder),
+        }))
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+
+      setAddonVariants(variants)
+      setSelectedVariantOptions((prev) => {
+        const next = { ...prev }
+        for (const v of variants) {
+          const first = v.options.find((o) => o.isActive) || v.options[0]
+          if (first?.id) next[v.id] = next[v.id] || first.id
+        }
+        return next
+      })
+    }
+
+    loadProductVariants().catch(() => {})
+  }, [selectedProduct?.id])
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <section className="bg-red-600 text-white py-12">
         <div className="container mx-auto px-4">
-          <h1 className="text-4xl font-bold mb-4">{t("services.largeFormatPage.headerTitle")}</h1>
-          <p className="text-xl">{t("services.largeFormatPage.headerSubtitle")}</p>
+          <h1 className="text-4xl font-bold mb-4">{serviceMeta?.name || t("services.largeFormatPage.headerTitle")}</h1>
+          <p className="text-xl">{serviceMeta?.description || t("services.largeFormatPage.headerSubtitle")}</p>
           {customDesign && (
             <div className="mt-4 p-3 bg-white/10 rounded-lg">
               <div className="flex items-center gap-2">
@@ -212,7 +394,9 @@ export default function LargeFormatPage() {
                       />
                     </div>
                     <div className="flex-1">
-                      <h3 className="font-semibold text-lg">{t("services.largeFormatPage.customDesignCardTitle")} {t(`services.largeFormatPage.products.${selectedProduct.id}.name`)}</h3>
+                      <h3 className="font-semibold text-lg">
+                        {t("services.largeFormatPage.customDesignCardTitle")} {selectedProduct.name}
+                      </h3>
                       <p className="text-sm text-gray-600 capitalize mb-2">{t("services.largeFormatPage.manuallyCreated")}</p>
                       <Badge variant="secondary" className="bg-red-100 text-red-800">
                         {t("services.largeFormatPage.readyForPrinting")}
@@ -233,7 +417,7 @@ export default function LargeFormatPage() {
               </CardHeader>
               <CardContent>
                 <div className="grid gap-4">
-                  {largeFormatProducts.map((product) => (
+                  {products.map((product) => (
                     <div
                       key={product.id}
                       className={`border rounded-lg p-4 cursor-pointer transition-all ${
@@ -243,33 +427,34 @@ export default function LargeFormatPage() {
                       }`}
                       onClick={() => {
                         setSelectedProduct(product)
-                        setCustomWidth(product.baseSize.width)
-                        setCustomHeight(product.baseSize.height)
-                        setCustomDesign(null) // Clear custom design when product changes
+                        setCustomWidth(Number(product.baseSize.width) || 1)
+                        setCustomHeight(Number(product.baseSize.height) || 1)
+                        setSelectedVariantOptions({})
+                        setCustomDesign(null)
                       }}
                     >
                       <div className="flex items-start gap-4">
                         <img
                           src={product.image || "/placeholder.svg"}
-                          alt={t(`services.largeFormatPage.products.${product.id}.name`)}
+                          alt={product.name}
                           className="w-20 h-20 object-cover rounded"
                         />
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-2">
-                            <h3 className="font-semibold text-lg">{t(`services.largeFormatPage.products.${product.id}.name`)}</h3>
+                            <h3 className="font-semibold text-lg">{product.name}</h3>
                             {product.weatherResistant && (
                               <Badge variant="secondary" className="text-xs">
                                 {t("services.largeFormatPage.weatherResistant")}
                               </Badge>
                             )}
                           </div>
-                          <p className="text-sm text-gray-600 mb-2">{t(`services.largeFormatPage.products.${product.id}.description`)}</p>
+                          <p className="text-sm text-gray-600 mb-2">{product.description}</p>
                           <div className="flex items-center gap-4">
                             <span className="text-sm font-medium text-red-600">
-                              ${product.price.toFixed(2)} {t(`services.largeFormatPage.products.${product.id}.priceUnit`)}
+                              ${product.price.toFixed(2)} {getPriceUnitLabel(product.areaPricing)}
                             </span>
                             <span className="text-xs text-gray-500">
-                              {t("services.largeFormatPage.baseLabel")} {product.baseSize.width} × {product.baseSize.height} {t(`services.largeFormatPage.products.${product.id}.unit`)}
+                              {t("services.largeFormatPage.baseLabel")} {product.baseSize.width} × {product.baseSize.height} {product.baseSize.unit}
                             </span>
                           </div>
                         </div>
@@ -290,7 +475,7 @@ export default function LargeFormatPage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <Label htmlFor="width" className="text-sm font-medium mb-2 block">
-                        {t("services.largeFormatPage.width")} ({t(`services.largeFormatPage.products.${selectedProduct.id}.unit`)})
+                        {t("services.largeFormatPage.width")} ({selectedProduct.baseSize.unit})
                       </Label>
                       <Input
                         id="width"
@@ -304,7 +489,7 @@ export default function LargeFormatPage() {
                     </div>
                     <div>
                       <Label htmlFor="height" className="text-sm font-medium mb-2 block">
-                        {t("services.largeFormatPage.height")} ({t(`services.largeFormatPage.products.${selectedProduct.id}.unit`)})
+                        {t("services.largeFormatPage.height")} ({selectedProduct.baseSize.unit})
                       </Label>
                       <Input
                         id="height"
@@ -347,6 +532,39 @@ export default function LargeFormatPage() {
                     className="w-32"
                   />
                 </div>
+
+                {addonVariants.length > 0 ? (
+                  <div className="space-y-4">
+                    {addonVariants
+                      .slice()
+                      .sort((a, b) => a.sortOrder - b.sortOrder)
+                      .map((variant) => {
+                        const value = selectedVariantOptions[variant.id] || ""
+                        return (
+                          <div key={variant.id} className="space-y-2">
+                            <Label className="text-sm font-medium">{variant.name}</Label>
+                            <Select value={value} onValueChange={(v) => setSelectedVariantOptions((prev) => ({ ...prev, [variant.id]: v }))}>
+                              <SelectTrigger>
+                                <SelectValue placeholder={variant.name} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {variant.options
+                                  .filter((o) => o.isActive)
+                                  .slice()
+                                  .sort((a, b) => a.sortOrder - b.sortOrder)
+                                  .map((opt) => (
+                                    <SelectItem key={opt.id} value={opt.id}>
+                                      {opt.label}
+                                      {Number(opt.priceDelta) !== 0 ? ` (${opt.priceDelta > 0 ? "+" : ""}$${Number(opt.priceDelta).toFixed(2)})` : ""}
+                                    </SelectItem>
+                                  ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )
+                      })}
+                  </div>
+                ) : null}
 
                 <div>
                   <Label htmlFor="instructions" className="text-sm font-medium mb-2 block">
@@ -461,13 +679,13 @@ export default function LargeFormatPage() {
               <CardContent className="space-y-4">
                 <div className="space-y-3">
                   <div className="flex justify-between">
-                    <span className="font-medium">{t(`services.largeFormatPage.products.${selectedProduct.id}.name`)}</span>
+                    <span className="font-medium">{selectedProduct.name}</span>
                   </div>
                   <div className="text-sm text-gray-600 space-y-1">
                     <div className="flex justify-between">
                       <span>{t("services.largeFormatPage.size")}</span>
                       <span>
-                        {customWidth} × {customHeight} {t(`services.largeFormatPage.products.${selectedProduct.id}.unit`)}
+                        {customWidth} × {customHeight} {selectedProduct.baseSize.unit}
                       </span>
                     </div>
                     {calculateArea() && (
@@ -486,6 +704,20 @@ export default function LargeFormatPage() {
                         <span className="text-red-600">{t("services.largeFormatPage.custom")}</span>
                       </div>
                     )}
+                    {addonVariants
+                      .slice()
+                      .sort((a, b) => a.sortOrder - b.sortOrder)
+                      .map((v) => {
+                        const chosen = selectedVariantOptions[v.id]
+                        const opt = v.options.find((o) => o.id === chosen) || null
+                        if (!opt?.label) return null
+                        return (
+                          <div key={v.id} className="flex justify-between">
+                            <span>{v.name}</span>
+                            <span>{opt.label}</span>
+                          </div>
+                        )
+                      })}
                   </div>
                 </div>
 
@@ -494,12 +726,12 @@ export default function LargeFormatPage() {
                 <div className="space-y-2">
                   <div className="flex justify-between">
                     <span>{t("services.largeFormatPage.unitPrice")}</span>
-                    <span>${selectedProduct.price.toFixed(2)}</span>
+                    <span>${unitPriceWithAddons.toFixed(2)}</span>
                   </div>
-                  {selectedProduct.id === "banner" && (
+                  {selectedProduct.areaPricing && (
                     <div className="flex justify-between text-sm text-gray-600">
                       <span>{t("services.largeFormatPage.areaCost")}</span>
-                      <span>${(calculateArea()! * selectedProduct.price).toFixed(2)}</span>
+                      <span>${(calculateArea()! * unitPriceWithAddons).toFixed(2)}</span>
                     </div>
                   )}
                   <div className="flex justify-between font-bold text-lg">
@@ -563,7 +795,7 @@ export default function LargeFormatPage() {
           isOpen={showDesignEditor}
           onClose={() => setShowDesignEditor(false)}
           productImage={selectedProduct.image}
-          productName={t(`services.largeFormatPage.products.${selectedProduct.id}.name`)}
+          productName={selectedProduct.name}
           initialDesign={
             customDesign
               ? {
