@@ -102,6 +102,7 @@ export async function GET(request: Request) {
       { key: "image", header: "image" },
       { key: "is_active", header: "is_active" },
       { key: "is_featured", header: "is_featured" },
+      { key: "is_quotable", header: "is_quotable" },
       { key: "wholesale_tiers", header: "wholesale_tiers" },
       { key: "variants", header: "variants" },
       { key: "created_at", header: "created_at" },

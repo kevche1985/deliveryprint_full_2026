@@ -128,6 +128,7 @@ export default async function ProductDetailPage({ params }: { params: { id: stri
         priceDisclaimer: product.price_disclaimer,
         acceptsUploads: product.accepts_uploads ?? true,
         isCustomizable: product.is_customizable ?? false,
+        isQuotable: (product as any).is_quotable ?? false,
         specifications: product.specifications,
         shippingInfo: product.shipping_info,
       }}

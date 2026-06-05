@@ -1,10 +1,10 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel"
+import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious, type CarouselApi } from "@/components/ui/carousel"
 import { Package, ShoppingCart, Printer, FileText, PencilRuler, ShoppingBag, Truck } from "lucide-react"
 import { getImageUrl } from "@/lib/image-utils"
 import { type Product, getProducts } from "@/lib/database"
@@ -27,6 +27,7 @@ type MinimalProduct = {
 }
 
 export default function HomePage() {
+  const [catalogProducts, setCatalogProducts] = useState<Product[]>([])
   const [featuredProducts, setFeaturedProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -37,12 +38,14 @@ export default function HomePage() {
   const theme = getTheme()
   const [mainBanner, setMainBanner] = useState<MainBannerConfig | null>(null)
   const [heroHeight, setHeroHeight] = useState<number>(theme.bannerImageUrl ? 560 : 560)
+  const [onboardingCarouselApi, setOnboardingCarouselApi] = useState<CarouselApi | null>(null)
 
   useEffect(() => {
-    async function fetchFeaturedProducts() {
+    async function fetchCatalogProducts() {
       try {
-        const products = await getProducts({ featured: true, limit: 6 })
-        setFeaturedProducts(products)
+        const products = await getProducts()
+        setCatalogProducts(products)
+        setFeaturedProducts(products.filter((p) => p.is_featured).slice(0, 6))
       } catch (err) {
         console.error("Error fetching featured products:", err)
         setError(t("home.errors.failedToLoadFeatured"))
@@ -50,8 +53,16 @@ export default function HomePage() {
         setLoading(false)
       }
     }
-    fetchFeaturedProducts()
+    fetchCatalogProducts()
   }, [])
+
+  useEffect(() => {
+    if (!onboardingCarouselApi) return
+    const id = window.setInterval(() => {
+      onboardingCarouselApi.scrollNext()
+    }, 3000)
+    return () => window.clearInterval(id)
+  }, [onboardingCarouselApi])
 
   useEffect(() => {
     let cancelled = false
@@ -87,6 +98,10 @@ export default function HomePage() {
   const heroObjectPosition = mainBanner?.objectPosition || "50% 50%"
 
   const handleAddToCartAndCheckout = (product: Product | MinimalProduct) => {
+    if ("is_quotable" in product && !!(product as any).is_quotable) {
+      router.push(`/quote?productId=${product.id}`)
+      return
+    }
     track("add_to_cart", { productId: product.id, price: product.price })
     addItem({
       productId: product.id,
@@ -135,6 +150,10 @@ export default function HomePage() {
       image: "/placeholder.svg?height=300&width=400",
     },
   ]
+
+  const onboardingProducts = useMemo(() => {
+    return catalogProducts.length > 0 ? catalogProducts : sampleProducts
+  }, [catalogProducts])
 
   return (
     <main className="flex-1">
@@ -275,7 +294,38 @@ export default function HomePage() {
       <section className="py-16 bg-gray-50">
         <div className="container mx-auto px-4 grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
           <div className="rounded-2xl overflow-hidden shadow-editorial">
-            <img src="/placeholder.svg?height=540&width=720" alt="Onboarding" className="w-full h-full object-cover" />
+            <Carousel
+              setApi={setOnboardingCarouselApi}
+              opts={{ loop: true, align: "start" }}
+              className="w-full"
+            >
+              <CarouselContent className="-ml-0">
+                {onboardingProducts.map((product) => (
+                  <CarouselItem key={product.id} className="pl-0">
+                    <div className="relative w-full h-[540px] bg-gray-100">
+                      {product.image ? (
+                        <img
+                          src={getImageUrl(product.image as any)}
+                          alt={product.name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <Package className="h-12 w-12 text-gray-400" />
+                        </div>
+                      )}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent" />
+                      <div className="absolute left-6 right-6 bottom-6">
+                        <div className="text-white text-2xl font-semibold drop-shadow-sm">{product.name}</div>
+                        {"price" in product && typeof (product as any).price === "number" && !("is_quotable" in product && !!(product as any).is_quotable) && (
+                          <div className="mt-1 text-white/90 text-sm drop-shadow-sm">${(product as any).price.toFixed(2)}</div>
+                        )}
+                      </div>
+                    </div>
+                  </CarouselItem>
+                ))}
+              </CarouselContent>
+            </Carousel>
           </div>
           <div>
             <div className="text-xs tracking-[0.2em] text-emerald-700 mb-2">PRIMEROS PASOS</div>

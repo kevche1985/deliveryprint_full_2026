@@ -13,7 +13,8 @@ import ProductTabs from "./ProductTabs"
 import PriceDisplay from "./PriceDisplay"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Heart, Share2, ShoppingCart } from "lucide-react"
+import { Heart, Share2, ShoppingCart, FileText } from "lucide-react"
+import { useRouter } from "next/navigation"
 
 export type ProductVariantOption = {
   id: string
@@ -42,6 +43,7 @@ export type ProductDetail = {
   priceDisclaimer?: string | null
   acceptsUploads: boolean
   isCustomizable: boolean
+  isQuotable: boolean
   specifications: any | null
   shippingInfo: string | null
 }
@@ -175,6 +177,7 @@ export default function ProductDetailClient({
   const { t } = useLanguage()
   const { addItem } = useCart()
   const { toast } = useToast()
+  const router = useRouter()
 
   const [sessionId] = useState(() => generateSessionId())
 
@@ -411,14 +414,18 @@ export default function ProductDetailClient({
         <div className="space-y-5">
           <h1 className="text-3xl font-bold text-gray-900">{product.name}</h1>
 
-          <PriceDisplay
-            totalPrice={totalPrice}
-            unitPrice={unitPrice}
-            contextLine={tierMode ? `${t("product.quantity_label")}: ${effectiveQuantity}` : null}
-            disclaimer={product.priceDisclaimer ?? null}
-          />
+          {product.isQuotable ? (
+            <p className="text-sm text-gray-700">{t("productDetail.quoteOnlyNotice")}</p>
+          ) : (
+            <PriceDisplay
+              totalPrice={totalPrice}
+              unitPrice={unitPrice}
+              contextLine={tierMode ? `${t("product.quantity_label")}: ${effectiveQuantity}` : null}
+              disclaimer={product.priceDisclaimer ?? null}
+            />
+          )}
 
-          {discreteTierMode ? (
+          {!product.isQuotable && discreteTierMode ? (
             <div className="space-y-2">
               <label className="text-sm font-medium text-gray-900">{t("product.quantity_label")}</label>
               <Select value={String(selectedTierQty)} onValueChange={(val) => setSelectedTierQty(Number.parseInt(val, 10))}>
@@ -436,7 +443,7 @@ export default function ProductDetailClient({
             </div>
           ) : null}
 
-          {dropdownGroups.length > 0 && (
+          {!product.isQuotable && dropdownGroups.length > 0 && (
             <VariantDropdowns
               groups={dropdownGroups}
               selectedOptions={selectedOptions}
@@ -446,7 +453,7 @@ export default function ProductDetailClient({
 
           {product.shortDescription ? <p className="text-gray-700">{product.shortDescription}</p> : null}
 
-          <div className="space-y-4">
+          {!product.isQuotable ? <div className="space-y-4">
             <FileUploadZone sessionId={sessionId} files={uploadedFiles} onChange={setUploadedFiles} />
 
             <div className="space-y-2">
@@ -471,9 +478,9 @@ export default function ProductDetailClient({
                 onChange={(e) => setNotes(e.target.value)}
               />
             </div>
-          </div>
+          </div> : null}
 
-          {chipGroup ? (
+          {!product.isQuotable && chipGroup ? (
             <ChipVariantGroup
               group={chipGroup}
               selectedOptionId={selectedOptions[chipGroup.id]}
@@ -481,12 +488,19 @@ export default function ProductDetailClient({
             />
           ) : null}
 
-          {!discreteTierMode ? <QuantityStepper value={quantity} onChange={setQuantity} /> : null}
+          {!product.isQuotable && !discreteTierMode ? <QuantityStepper value={quantity} onChange={setQuantity} /> : null}
 
-          <Button className="w-full bg-[#8B0000] hover:bg-[#6B0000]" onClick={handleAddToCart} disabled={isAdding}>
-            <ShoppingCart className="mr-2 h-4 w-4" />
-            {t("product.cta_add_to_cart")}
-          </Button>
+          {product.isQuotable ? (
+            <Button className="w-full bg-[#8B0000] hover:bg-[#6B0000]" onClick={() => router.push(`/quote?productId=${product.id}`)}>
+              <FileText className="mr-2 h-4 w-4" />
+              {t("common.quote")}
+            </Button>
+          ) : (
+            <Button className="w-full bg-[#8B0000] hover:bg-[#6B0000]" onClick={handleAddToCart} disabled={isAdding}>
+              <ShoppingCart className="mr-2 h-4 w-4" />
+              {t("product.cta_add_to_cart")}
+            </Button>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <Button variant="outline" type="button">

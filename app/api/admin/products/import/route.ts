@@ -49,9 +49,10 @@ export async function POST(request: Request) {
     for (const record of records) {
       try {
         const row = normalizeRecord(record)
-        const { operation, id, name, description, price, category, image, is_active, is_featured, wholesale_tiers, variants } = row
+        const { operation, id, name, description, price, category, image, is_active, is_featured, is_quotable, wholesale_tiers, variants } = row
 
-        if (!name || !price) {
+        const quoteOnly = parseBool(is_quotable, false)
+        if (!name || (!price && !quoteOnly)) {
           errors.push(`Skipping row due to missing name or price: ${JSON.stringify(record)}`)
           continue
         }
@@ -59,11 +60,12 @@ export async function POST(request: Request) {
         const productData: any = {
           name: String(name),
           description: description ? String(description) : null,
-          price: Number.parseFloat(price),
+          price: quoteOnly ? (price ? Number.parseFloat(price) : 0) : Number.parseFloat(price),
           category: category ? String(category) : null,
           image: image ? String(image) : null,
           is_active: parseBool(is_active, true),
           is_featured: parseBool(is_featured, false),
+          is_quotable: quoteOnly,
         }
 
         if (isNaN(productData.price)) {

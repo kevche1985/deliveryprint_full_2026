@@ -139,19 +139,26 @@ export default function ProductsPage() {
                          {product.is_customizable && (
                            <Badge className="absolute top-2 right-2 bg-[#8B0000]">{t("products.badgeCustomizable")}</Badge>
                          )}
+                         {product.is_quotable && (
+                           <Badge className="absolute top-2 left-2 bg-emerald-700">{t("products.badgeQuoteOnly")}</Badge>
+                         )}
                        </div>
                      </CardHeader>
                     <CardContent className="p-4 flex-1">
                       <h3 className="font-semibold text-lg mb-1 line-clamp-1">{product.name}</h3>
                        <p className="text-gray-600 text-sm mb-2 line-clamp-2">{product.description}</p>
-                       <div className="flex items-baseline gap-2">
-                         <span className="text-sm font-medium text-gray-500">{t("products.fromLabel")}</span>
-                         <span className="text-2xl font-bold text-[#8B0000]">${product.price.toFixed(2)}</span>
-                       </div>
+                       {!product.is_quotable && (
+                         <div className="flex items-baseline gap-2">
+                           <span className="text-sm font-medium text-gray-500">{t("products.fromLabel")}</span>
+                           <span className="text-2xl font-bold text-[#8B0000]">${product.price.toFixed(2)}</span>
+                         </div>
+                       )}
                      </CardContent>
                     <CardFooter className="p-4 pt-0 mt-auto">
-                       <Link href={`/products/${product.id}`} className="w-full">
-                        <Button className="w-full bg-[#8B0000] hover:bg-[#6B0000]">{language === "es" ? "Ver" : "View"}</Button>
+                       <Link href={product.is_quotable ? `/quote?productId=${product.id}` : `/products/${product.id}`} className="w-full">
+                        <Button className="w-full bg-[#8B0000] hover:bg-[#6B0000]">
+                          {product.is_quotable ? t("common.quote") : language === "es" ? "Ver" : "View"}
+                        </Button>
                        </Link>
                      </CardFooter>
                    </Card>

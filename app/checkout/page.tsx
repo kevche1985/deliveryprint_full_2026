@@ -449,13 +449,28 @@ export default function CheckoutPage() {
         const cartItemsForSession = items.map((item) => {
           const c: any = (item as any).customizations || {}
           const uploaded = c?.uploadedFiles?.[0] || null
+          const customizedProductImage = c?.customDesign?.customizedProductImage || c?.customizedProductImage || null
+          const aiPreview = c?.aiDesign?.previewUrl || null
+          const externalUrl = c?.designUrl || null
+          const uploadedPublic = uploaded?.file_url || uploaded?.publicUrl || null
+          const previewUrl = c?.preview_url || aiPreview || customizedProductImage || uploadedPublic || (item as any).image || null
+          const downloadUrl = c?.download_url || c?.storage_url || externalUrl || uploadedPublic || customizedProductImage || aiPreview || (item as any).image || null
           return {
             product_id: typeof item.productId === "string" ? item.productId : null,
             material_type: c?.material_type || c?.specifications?.material || null,
+            name: typeof (item as any).name === "string" ? (item as any).name : null,
+            variant_id: typeof (item as any).variantId === "string" ? (item as any).variantId : null,
+            design_id: typeof (item as any).designId === "string" ? (item as any).designId : typeof c?.design_id === "string" ? c.design_id : null,
             quantity: item.quantity || 1,
             price: item.price || 0,
             uploaded_file_id: uploaded?.uploaded_file_id || c?.uploaded_file_id || null,
-            file_url: uploaded?.file_url || c?.design_file_url || c?.designUrl || null,
+            file_url: uploaded?.file_url || c?.design_file_url || c?.designUrl || downloadUrl || null,
+            product_image_url: (item as any).image || null,
+            design_image_url: previewUrl || null,
+            design_file_url: downloadUrl || null,
+            customized_image_url: customizedProductImage || null,
+            print_ready_file_url: downloadUrl || null,
+            customizations: (item as any).customizations || null,
           }
         })
 

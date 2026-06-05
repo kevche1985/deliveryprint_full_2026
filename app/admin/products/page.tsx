@@ -41,6 +41,7 @@ type Product = {
   image: string | null
   is_active: boolean
   is_featured: boolean
+  is_quotable: boolean | null
   is_customizable: boolean
   accepts_uploads: boolean | null
   technique: string | null
@@ -94,6 +95,7 @@ export default function ProductManagement() {
     has_archive_guide: false,
     is_active: true,
     is_featured: false,
+    is_quotable: false,
     accepts_uploads: false,
     is_customizable: false,
     shipping_info: "",
@@ -373,6 +375,7 @@ export default function ProductManagement() {
         accepts_uploads: formData.accepts_uploads,
         is_active: formData.is_active,
         is_featured: formData.is_featured,
+        is_quotable: formData.is_quotable,
         is_customizable: formData.is_customizable,
         specifications: cleanedSpecs.length > 0 ? cleanedSpecs : null,
         shipping_info: formData.shipping_info || null,
@@ -542,6 +545,7 @@ export default function ProductManagement() {
       has_archive_guide: product.has_archive_guide ?? false,
       is_active: product.is_active,
       is_featured: product.is_featured,
+      is_quotable: product.is_quotable ?? false,
       accepts_uploads: product.accepts_uploads ?? false,
       is_customizable: product.is_customizable ?? false,
       shipping_info: product.shipping_info || "",
@@ -573,6 +577,7 @@ export default function ProductManagement() {
       has_archive_guide: false,
       is_active: true,
       is_featured: false,
+      is_quotable: false,
       accepts_uploads: false,
       is_customizable: false,
       shipping_info: "",
@@ -896,7 +901,7 @@ export default function ProductManagement() {
                         value={formData.pricing_mode === "tiers" ? String(tiersMinPrice ?? "") : formData.price}
                         onChange={(e) => setFormData({ ...formData, price: e.target.value })}
                         required
-                        disabled={isSaving || formData.pricing_mode === "tiers"}
+                        disabled={isSaving || formData.is_quotable || formData.pricing_mode === "tiers"}
                       />
                     </div>
                   </div>
@@ -929,7 +934,7 @@ export default function ProductManagement() {
                       value={formData.price_disclaimer}
                       onChange={(e) => setFormData({ ...formData, price_disclaimer: e.target.value })}
                       rows={2}
-                      disabled={isSaving}
+                      disabled={isSaving || formData.is_quotable}
                     />
                   </div>
 
@@ -989,6 +994,15 @@ export default function ProductManagement() {
                       <Label htmlFor="is_customizable">{t("admin.products.form.isCustomizableLabel")}</Label>
                     </div>
                     <div className="flex items-center space-x-2">
+                      <Switch
+                        id="is_quotable"
+                        checked={formData.is_quotable}
+                        onCheckedChange={(checked) => setFormData({ ...formData, is_quotable: checked })}
+                        disabled={isSaving}
+                      />
+                      <Label htmlFor="is_quotable">{t("admin.products.form.quoteOnlyLabel")}</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
                       <Switch id="is_active" checked={formData.is_active} onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked })} disabled={isSaving} />
                       <Label htmlFor="is_active">{t("admin.products.form.activeLabel")}</Label>
                     </div>
@@ -1008,10 +1022,12 @@ export default function ProductManagement() {
                     <MediaManager items={mediaItems} onChange={setMediaItems} onRemoveExisting={handleRemoveMedia} disabled={isSaving} />
                   </div>
 
-                  <div className="space-y-2">
-                    <Label>{t("admin.products.form.variantGroupsLabel")}</Label>
-                    <VariantGroupBuilder groups={variantGroups} onChange={setVariantGroups} disabled={isSaving} />
-                  </div>
+                  {!formData.is_quotable && (
+                    <div className="space-y-2">
+                      <Label>{t("admin.products.form.variantGroupsLabel")}</Label>
+                      <VariantGroupBuilder groups={variantGroups} onChange={setVariantGroups} disabled={isSaving} />
+                    </div>
+                  )}
 
                   <div className="space-y-2">
                     <Label>{t("admin.products.form.specificationsLabel")}</Label>
@@ -1029,53 +1045,59 @@ export default function ProductManagement() {
                     />
                   </div>
 
-                  <div className="space-y-2">
-                    <Label>{t("admin.products.form.pricingModeLabel")}</Label>
-                    <Select
-                      value={formData.pricing_mode}
-                      onValueChange={(val) => {
-                        const v = val as "quantity" | "tiers"
-                        setFormData({ ...formData, pricing_mode: v })
-                        if (v === "tiers" && tierRows.length === 0) addTierRow()
-                      }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="quantity">{t("admin.products.form.pricingModeQuantity")}</SelectItem>
-                        <SelectItem value="tiers">{t("admin.products.form.pricingModeTiers")}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  {!formData.is_quotable && (
+                    <div className="space-y-2">
+                      <Label>{t("admin.products.form.pricingModeLabel")}</Label>
+                      <Select
+                        value={formData.pricing_mode}
+                        onValueChange={(val) => {
+                          const v = val as "quantity" | "tiers"
+                          setFormData({ ...formData, pricing_mode: v })
+                          if (v === "tiers" && tierRows.length === 0) addTierRow()
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="quantity">{t("admin.products.form.pricingModeQuantity")}</SelectItem>
+                          <SelectItem value="tiers">{t("admin.products.form.pricingModeTiers")}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
 
-                  <div className="space-y-2">
-                    <Label>{t("admin.products.form.variantPricingModeLabel")}</Label>
-                    <Select
-                      value={formData.variant_price_mode}
-                      onValueChange={(val) => setFormData({ ...formData, variant_price_mode: val as "add" | "override" })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="add">{t("admin.products.form.variantPricingAdd")}</SelectItem>
-                        <SelectItem value="override">{t("admin.products.form.variantPricingOverride")}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  {!formData.is_quotable && (
+                    <div className="space-y-2">
+                      <Label>{t("admin.products.form.variantPricingModeLabel")}</Label>
+                      <Select
+                        value={formData.variant_price_mode}
+                        onValueChange={(val) => setFormData({ ...formData, variant_price_mode: val as "add" | "override" })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="add">{t("admin.products.form.variantPricingAdd")}</SelectItem>
+                          <SelectItem value="override">{t("admin.products.form.variantPricingOverride")}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
 
-                  <div className="flex items-center space-x-2">
-                    <Switch
-                      id="variant_tier_stack"
-                      checked={formData.variant_tier_stack}
-                      onCheckedChange={(checked) => setFormData({ ...formData, variant_tier_stack: checked })}
-                      disabled={isSaving}
-                    />
-                    <Label htmlFor="variant_tier_stack">Add modifiers on top of tier price</Label>
-                  </div>
+                  {!formData.is_quotable && (
+                    <div className="flex items-center space-x-2">
+                      <Switch
+                        id="variant_tier_stack"
+                        checked={formData.variant_tier_stack}
+                        onCheckedChange={(checked) => setFormData({ ...formData, variant_tier_stack: checked })}
+                        disabled={isSaving}
+                      />
+                      <Label htmlFor="variant_tier_stack">Add modifiers on top of tier price</Label>
+                    </div>
+                  )}
 
-                  {formData.pricing_mode === "tiers" ? (
+                  {!formData.is_quotable && formData.pricing_mode === "tiers" ? (
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
                         <Label>{t("admin.products.form.tiersLabel")}</Label>

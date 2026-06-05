@@ -10,6 +10,7 @@ export type Product = {
   image: string | null // Base product image
   is_active: boolean
   is_featured: boolean
+  is_quotable?: boolean
   // New: controls whether product supports customization flows
   is_customizable: boolean
   created_at: string
@@ -243,6 +244,7 @@ export async function getProducts(
   // Default legacy/null values to customizable=true for backward compatibility
   return (data ?? []).map((p: any) => ({
     ...p,
+    is_quotable: p?.is_quotable ?? false,
     is_customizable: p?.is_customizable ?? true,
   })) as Product[]
 }

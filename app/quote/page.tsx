@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/lib/auth-context"
 import { useLanguage } from "@/lib/language-context"
+import { supabase } from "@/lib/supabase"
 import { Plus, Trash2, FileText, Send } from "lucide-react"
 
 type QuoteItem = {
@@ -48,6 +49,33 @@ export default function QuotePage() {
   })
 
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  useEffect(() => {
+    const productId =
+      typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("productId") : null
+    if (!productId) return
+    let cancelled = false
+    supabase
+      .from("products")
+      .select("name")
+      .eq("id", productId)
+      .single()
+      .then(({ data }) => {
+        if (cancelled) return
+        const name = data?.name?.trim() ? data.name.trim() : productId
+        setFormData((prev) => ({
+          ...prev,
+          serviceType: prev.serviceType || "other",
+          items: prev.items.length
+            ? prev.items.map((it, idx) => (idx === 0 && !it.description.trim() ? { ...it, description: name } : it))
+            : [{ id: "1", description: name, quantity: 1 }],
+        }))
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const handleInputChange = (field: keyof QuoteFormData, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }))

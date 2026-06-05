@@ -145,22 +145,33 @@ export async function POST(req: Request, { params }: { params: { reference: stri
       const price = Number(item?.price ?? 0)
       const maybeProductId = typeof item?.product_id === "string" ? item.product_id : null
       const productId = isUuid(maybeProductId) ? maybeProductId : null
+      const maybeVariantId = typeof item?.variant_id === "string" ? item.variant_id : null
+      const variantId = isUuid(maybeVariantId) ? maybeVariantId : null
+      const maybeDesignId = typeof item?.design_id === "string" ? item.design_id : null
+      const designId = isUuid(maybeDesignId) ? maybeDesignId : null
+      const name = typeof item?.name === "string" && item.name.trim() ? item.name.trim() : materialType || "Print Item"
+      const productImageUrl = typeof item?.product_image_url === "string" ? item.product_image_url : null
+      const designImageUrl = (typeof item?.design_image_url === "string" ? item.design_image_url : null) || fileUrl
+      const designFileUrl = (typeof item?.design_file_url === "string" ? item.design_file_url : null) || fileUrl
+      const customizedImageUrl = typeof item?.customized_image_url === "string" ? item.customized_image_url : null
+      const printReadyFileUrl = (typeof item?.print_ready_file_url === "string" ? item.print_ready_file_url : null) || fileUrl
+      const customizations = (item && typeof item === "object" && "customizations" in item ? (item as any).customizations : null) ?? item ?? null
       return {
         order_id: createdOrder.id,
         product_id: productId,
-        variant_id: null,
-        design_id: null,
+        variant_id: variantId,
+        design_id: designId,
         digital_product_id: null,
-        name: materialType || "Print Item",
+        name,
         material_type: materialType,
         quantity: Number.isFinite(qty) && qty > 0 ? qty : 1,
         price: Number.isFinite(price) ? price : 0,
-        customizations: item ?? null,
-        product_image_url: null,
-        design_image_url: fileUrl,
-        design_file_url: fileUrl,
-        customized_image_url: null,
-        print_ready_file_url: fileUrl,
+        customizations,
+        product_image_url: productImageUrl,
+        design_image_url: designImageUrl,
+        design_file_url: designFileUrl,
+        customized_image_url: customizedImageUrl,
+        print_ready_file_url: printReadyFileUrl,
       }
     })
 
