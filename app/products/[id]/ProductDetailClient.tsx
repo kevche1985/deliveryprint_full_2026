@@ -241,6 +241,30 @@ export default function ProductDetailClient({
     return false
   }, [product.wholesaleTiers, legacyTiers, variantGroups, selectedOptions])
 
+  const maxQuantityAllowed = useMemo(() => {
+    if (!rangeTierMode) return 999
+    const caps: number[] = []
+    legacyTiers.forEach((t) => {
+      if (t.maxQuantity != null && Number.isFinite(t.maxQuantity) && t.maxQuantity > 0) caps.push(t.maxQuantity)
+    })
+    for (const group of variantGroups) {
+      const selectedOptionId = selectedOptions[group.id]
+      const option = group.options.find((o) => o.id === selectedOptionId)
+      const tiers = normalizeTiers(option?.tier_pricing)
+      const mode = getTierMode(option?.tier_pricing, tiers)
+      if (mode !== "range") continue
+      tiers.forEach((t) => {
+        if (t.maxQuantity != null && Number.isFinite(t.maxQuantity) && t.maxQuantity > 0) caps.push(t.maxQuantity)
+      })
+    }
+    if (caps.length) return Math.max(1, Math.min(...caps))
+    return 50000
+  }, [rangeTierMode, legacyTiers, variantGroups, selectedOptions])
+
+  useEffect(() => {
+    setQuantity((q) => Math.max(1, Math.min(maxQuantityAllowed, q)))
+  }, [maxQuantityAllowed])
+
   const tierQuantities = useMemo(() => {
     if (rangeTierMode) return []
     if (variantTierQuantities.length > 0) return variantTierQuantities
@@ -488,7 +512,7 @@ export default function ProductDetailClient({
             />
           ) : null}
 
-          {!product.isQuotable && !discreteTierMode ? <QuantityStepper value={quantity} onChange={setQuantity} /> : null}
+          {!product.isQuotable && !discreteTierMode ? <QuantityStepper value={quantity} onChange={setQuantity} max={maxQuantityAllowed} /> : null}
 
           {product.isQuotable ? (
             <Button className="w-full bg-[#8B0000] hover:bg-[#6B0000]" onClick={() => router.push(`/quote?productId=${product.id}`)}>

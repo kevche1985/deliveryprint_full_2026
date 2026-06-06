@@ -3,10 +3,11 @@
 import { Button } from "@/components/ui/button"
 import { useLanguage } from "@/lib/language-context"
 
-export default function QuantityStepper({ value, onChange }: { value: number; onChange: (n: number) => void }) {
+export default function QuantityStepper({ value, onChange, max }: { value: number; onChange: (n: number) => void; max?: number }) {
   const { t } = useLanguage()
 
-  const clamp = (n: number) => Math.max(1, Math.min(999, n))
+  const maxAllowed = Number.isFinite(max) && (max as number) > 0 ? (max as number) : 999
+  const clamp = (n: number) => Math.max(1, Math.min(maxAllowed, n))
 
   return (
     <div className="space-y-2">
@@ -19,6 +20,7 @@ export default function QuantityStepper({ value, onChange }: { value: number; on
           className="h-10 w-full rounded-md border border-input bg-background px-3 text-center text-sm"
           value={String(value)}
           inputMode="numeric"
+          max={maxAllowed}
           onChange={(e) => {
             const n = Number.parseInt(e.target.value, 10)
             if (Number.isFinite(n)) onChange(clamp(n))
@@ -26,11 +28,10 @@ export default function QuantityStepper({ value, onChange }: { value: number; on
           }}
           onBlur={() => onChange(clamp(value))}
         />
-        <Button type="button" variant="outline" onClick={() => onChange(clamp(value + 1))}>
+        <Button type="button" variant="outline" disabled={value >= maxAllowed} onClick={() => onChange(clamp(value + 1))}>
           +
         </Button>
       </div>
     </div>
   )
 }
-
