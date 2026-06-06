@@ -38,11 +38,11 @@ export async function getAIProviderSettings(userId?: string | null): Promise<AIP
   const fallback = tenantId && !primary.data ? await baseQuery.is("tenant_id", null).maybeSingle() : null
   const row = (primary.data || fallback?.data || null) as any
 
-  const envKey = process.env.OPENAI_API_KEY || null
+  const hasRow = !!row
   const provider = row?.provider || "openai"
   const model = row?.model || "dall-e-3"
   const baseUrl = (row?.base_url as string | null) || defaultBaseUrl(provider)
-  const apiKey = (row?.api_key as string | null) || envKey
+  const apiKey = (row?.api_key as string | null) ?? (!hasRow ? process.env.OPENAI_API_KEY || null : null)
   const isActive = row?.is_active != null ? Boolean(row.is_active) : !!apiKey
 
   return {
@@ -56,4 +56,3 @@ export async function getAIProviderSettings(userId?: string | null): Promise<AIP
     isActive,
   }
 }
-

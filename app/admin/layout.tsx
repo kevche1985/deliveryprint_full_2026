@@ -371,6 +371,7 @@ function AdminContent({ children }: { children: React.ReactNode }) {
                     { href: "/admin/translations", icon: FileText, title: t("admin.nav.translations") },
                     { href: "/admin/widgets", icon: Puzzle, title: "Widgets" },
                     { href: "/admin/modules", icon: Settings, title: "Modules" },
+                    { href: "/admin/settings", icon: Settings, title: "Settings" },
                   ].map((item) => {
                     const active = pathname?.startsWith(item.href)
                     return (

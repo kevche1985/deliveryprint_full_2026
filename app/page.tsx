@@ -15,7 +15,7 @@ import { useLanguage } from "@/lib/language-context"
 import { getTheme } from "@/lib/theme"
 import PromoBanner from "@/components/promo-banner"
 import { track } from "@/lib/analytics"
-import type { MainBannerConfig } from "@/lib/branding"
+import { resolveMainBannerObjectFit, resolveMainBannerObjectPosition, type BannerObjectFit, type Breakpoint, type MainBannerConfig } from "@/lib/branding"
 
 // Minimal product shape used for fallback/sample items alongside DB Products
 type MinimalProduct = {
@@ -38,6 +38,8 @@ export default function HomePage() {
   const theme = getTheme()
   const [mainBanner, setMainBanner] = useState<MainBannerConfig | null>(null)
   const [heroHeight, setHeroHeight] = useState<number>(theme.bannerImageUrl ? 560 : 560)
+  const [heroObjectPosition, setHeroObjectPosition] = useState<string>("50% 50%")
+  const [heroObjectFit, setHeroObjectFit] = useState<BannerObjectFit>("cover")
   const [onboardingCarouselApi, setOnboardingCarouselApi] = useState<CarouselApi | null>(null)
 
   useEffect(() => {
@@ -82,12 +84,17 @@ export default function HomePage() {
     function compute() {
       const w = typeof window !== "undefined" ? window.innerWidth : 1280
       const b = mainBanner
+      const bp: Breakpoint = w < 768 ? "mobile" : w < 1280 ? "tablet" : "desktop"
       if (!b) {
         setHeroHeight(560)
+        setHeroObjectFit("cover")
+        setHeroObjectPosition("50% 50%")
         return
       }
-      const h = w < 768 ? b.heights.mobile : w < 1280 ? b.heights.tablet : b.heights.desktop
+      const h = b.heights[bp]
       setHeroHeight(h)
+      setHeroObjectFit(resolveMainBannerObjectFit(b, bp))
+      setHeroObjectPosition(resolveMainBannerObjectPosition(b, bp))
     }
     compute()
     window.addEventListener("resize", compute)
@@ -95,7 +102,6 @@ export default function HomePage() {
   }, [mainBanner])
 
   const heroImageUrl = mainBanner?.imageUrl || theme.bannerImageUrl
-  const heroObjectPosition = mainBanner?.objectPosition || "50% 50%"
 
   const handleAddToCartAndCheckout = (product: Product | MinimalProduct) => {
     if ("is_quotable" in product && !!(product as any).is_quotable) {
@@ -165,8 +171,8 @@ export default function HomePage() {
         <img
           src={heroImageUrl}
           alt="Main banner"
-          className="w-full h-full object-cover"
-          style={{ objectPosition: heroObjectPosition }}
+          className="w-full h-full"
+          style={{ objectFit: heroObjectFit, objectPosition: heroObjectPosition }}
         />
       </section>
 

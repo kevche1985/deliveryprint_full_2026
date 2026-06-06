@@ -60,8 +60,30 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Test OpenAI connection first
-      console.log("Testing OpenAI connection...")
+      const safeReadErrorBody = async (res: Response) => {
+        const ct = res.headers.get("content-type") || ""
+        if (ct.includes("application/json")) {
+          try {
+            return await res.json()
+          } catch {
+            return null
+          }
+        }
+        try {
+          const text = await res.text()
+          return text ? text.slice(0, 800) : null
+        } catch {
+          return null
+        }
+      }
+
+      const looksLikeHtml = (value: unknown) => {
+        if (typeof value !== "string") return false
+        const s = value.trim().slice(0, 64).toLowerCase()
+        return s.startsWith("<!doctype") || s.startsWith("<html")
+      }
+
+      console.log("Testing AI provider connection...", { provider: settings.provider, baseUrl })
       const testResponse = await fetchWithTimeout(`${baseUrl}/models`, {
         headers: {
           Authorization: `Bearer ${apiKey}`,
@@ -69,7 +91,9 @@ export async function POST(request: NextRequest) {
       })
 
       if (!testResponse.ok) {
-        throw new Error("OpenAI API connection failed")
+        const body = await safeReadErrorBody(testResponse)
+        console.error("AI provider connection failed", { status: testResponse.status, body })
+        throw new Error(`AI provider connection failed (${testResponse.status})`)
       }
 
       // Moderate content first
@@ -86,13 +110,20 @@ export async function POST(request: NextRequest) {
       })
 
       if (moderationResponse.ok) {
-        const moderationData = await moderationResponse.json()
-        if (moderationData.results?.[0]?.flagged) {
-          console.log("Content flagged by moderation")
-          return NextResponse.json(
-            { error: "Your prompt contains inappropriate content and cannot be processed" },
-            { status: 400 },
-          )
+        const ct = moderationResponse.headers.get("content-type") || ""
+        if (ct.includes("application/json")) {
+          const moderationData = await moderationResponse.json().catch(() => null)
+          if (moderationData?.results?.[0]?.flagged) {
+            console.log("Content flagged by moderation")
+            return NextResponse.json(
+              { error: "Your prompt contains inappropriate content and cannot be processed" },
+              { status: 400 },
+            )
+          }
+        } else {
+          const body = await safeReadErrorBody(moderationResponse)
+          console.error("Moderation returned non-JSON response", { body })
+          throw new Error("AI provider moderation returned non-JSON response. Check base URL in admin settings.")
         }
       }
 
@@ -106,9 +137,9 @@ export async function POST(request: NextRequest) {
         enhancedPrompt = enhancedPrompt || `Create a custom typography design for the text: ${prompt}. The font should be unique, readable, and reflect the character of the text.`
       }
 
-      console.log("Enhanced prompt created, sending to OpenAI...")
+      console.log("Enhanced prompt created, sending to provider...")
 
-      // Generate image with OpenAI
+      console.log("Generating image...", { provider: settings.provider, model: settings.model })
       const response = await fetchWithTimeout(`${baseUrl}/images/generations`, {
         method: "POST",
         headers: {
@@ -127,18 +158,34 @@ export async function POST(request: NextRequest) {
 
       // Handle API errors
       if (!response.ok) {
-        const errorData = await response.json()
-        console.error("OpenAI API error response:", errorData)
-        throw new Error(errorData.error?.message || "Failed to generate image")
+        const errorBody = await safeReadErrorBody(response)
+        console.error("AI provider API error response:", { status: response.status, body: errorBody })
+        const message =
+          typeof errorBody === "object" && errorBody && "error" in (errorBody as any) && (errorBody as any).error?.message
+            ? (errorBody as any).error.message
+            : typeof errorBody === "string" && errorBody
+              ? errorBody
+              : "Failed to generate image"
+        if (looksLikeHtml(message)) {
+          throw new Error("AI provider returned HTML. Check the Base URL configured in /admin/settings (it must be an OpenAI-compatible API base, usually ending in /v1).")
+        }
+        throw new Error(message)
+      }
+
+      const responseCt = response.headers.get("content-type") || ""
+      if (!responseCt.includes("application/json")) {
+        const body = await safeReadErrorBody(response)
+        console.error("AI provider returned non-JSON success response", { body })
+        throw new Error("AI provider returned a non-JSON response. Check the Base URL configured in /admin/settings.")
       }
 
       const data = await response.json()
-      console.log("OpenAI API response received successfully")
+      console.log("AI provider API response received successfully")
 
       // Validate response data
       if (!data.data || !data.data[0] || !data.data[0].url) {
-        console.error("Invalid response format from OpenAI:", data)
-        throw new Error("Invalid response format from OpenAI")
+        console.error("Invalid response format from AI provider:", data)
+        throw new Error("Invalid response format from AI provider")
       }
 
       const imageUrl = data.data[0].url
@@ -200,10 +247,10 @@ export async function POST(request: NextRequest) {
           note: "Image generated successfully, but not saved to database",
         })
       }
-    } catch (openaiError) {
-      console.error("OpenAI API error:", openaiError)
+    } catch (providerError) {
+      console.error("AI provider error:", providerError)
 
-      // Fall back to mock generator if OpenAI fails
+      // Fall back to mock generator if provider fails
       console.log("Falling back to mock generator")
       return generateMockDesign(request, prompt, type, userId)
     }
@@ -213,12 +260,12 @@ export async function POST(request: NextRequest) {
     // Provide more specific error messages
     let errorMessage = "Failed to generate image"
     if (error instanceof Error) {
-      if (error.message.includes("Invalid OpenAI API key")) {
-        errorMessage = "OpenAI API key is invalid"
+      if (error.message.toLowerCase().includes("invalid") && error.message.toLowerCase().includes("api key")) {
+        errorMessage = "AI API key is invalid"
       } else if (error.message.includes("rate limit")) {
         errorMessage = "Too many requests. Please try again later."
       } else if (error.message.includes("quota")) {
-        errorMessage = "OpenAI quota exceeded. Please try again later."
+        errorMessage = "AI quota exceeded. Please try again later."
       } else {
         errorMessage = error.message
       }

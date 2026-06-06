@@ -1418,26 +1418,56 @@ export default function ProductManagement() {
                         toast({ title: t("common.error"), description: t("admin.products.categories.nameRequired"), variant: "destructive" })
                         return
                       }
-                      if (editingCategory) {
-                        const { error } = await supabase
-                          .from("categories")
-                          .update({ name: categoryForm.name, description: categoryForm.description || null, is_active: categoryForm.is_active })
-                          .eq("id", editingCategory.id)
-                        if (error) throw error
-                        toast({ title: t("common.success"), description: t("admin.products.categories.updated") })
-                      } else {
-                        const { error } = await supabase
-                          .from("categories")
-                          .insert([{ name: categoryForm.name, description: categoryForm.description || null, is_active: categoryForm.is_active }])
-                        if (error) throw error
-                        toast({ title: t("common.success"), description: t("admin.products.categories.created") })
+                      const {
+                        data: { session },
+                      } = await supabase.auth.getSession()
+                      const token = session?.access_token || ""
+                      if (!token) throw new Error("Unauthorized")
+
+                      const url = "/api/admin/categories"
+                      const method = editingCategory ? "PATCH" : "POST"
+                      const body = editingCategory
+                        ? {
+                            id: editingCategory.id,
+                            name: categoryForm.name,
+                            description: categoryForm.description || null,
+                            is_active: categoryForm.is_active,
+                          }
+                        : {
+                            name: categoryForm.name,
+                            description: categoryForm.description || null,
+                            is_active: categoryForm.is_active,
+                          }
+                      const res = await fetch(url, {
+                        method,
+                        headers: {
+                          Authorization: `Bearer ${token}`,
+                          "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify(body),
+                      })
+                      if (!res.ok) {
+                        let msg: string | undefined
+                        try {
+                          const json = await res.json()
+                          msg = json?.error
+                        } catch {}
+                        throw new Error(msg || t("admin.products.categories.saveFailed"))
                       }
+                      toast({
+                        title: t("common.success"),
+                        description: editingCategory ? t("admin.products.categories.updated") : t("admin.products.categories.created"),
+                      })
                       setEditingCategory(null)
                       setCategoryForm({ name: "", description: "", is_active: true })
                       loadCategories()
                     } catch (error) {
                       console.error("Error saving category:", error)
-                      toast({ title: t("common.error"), description: t("admin.products.categories.saveFailed"), variant: "destructive" })
+                      toast({
+                        title: t("common.error"),
+                        description: error instanceof Error ? error.message : t("admin.products.categories.saveFailed"),
+                        variant: "destructive",
+                      })
                     }
                   }}
                 >
@@ -1479,13 +1509,32 @@ export default function ProductManagement() {
                             onClick={async () => {
                               if (!confirm(t("admin.products.categories.deleteConfirm"))) return
                               try {
-                                const { error } = await supabase.from("categories").delete().eq("id", c.id)
-                                if (error) throw error
+                                const {
+                                  data: { session },
+                                } = await supabase.auth.getSession()
+                                const token = session?.access_token || ""
+                                if (!token) throw new Error("Unauthorized")
+                                const res = await fetch(`/api/admin/categories?id=${c.id}`, {
+                                  method: "DELETE",
+                                  headers: { Authorization: `Bearer ${token}` },
+                                })
+                                if (!res.ok) {
+                                  let msg: string | undefined
+                                  try {
+                                    const json = await res.json()
+                                    msg = json?.error
+                                  } catch {}
+                                  throw new Error(msg || t("admin.products.categories.deleteFailed"))
+                                }
                                 toast({ title: t("common.success"), description: t("admin.products.categories.deleted") })
                                 loadCategories()
                               } catch (error) {
                                 console.error("Error deleting category:", error)
-                                toast({ title: t("common.error"), description: t("admin.products.categories.deleteFailed"), variant: "destructive" })
+                                toast({
+                                  title: t("common.error"),
+                                  description: error instanceof Error ? error.message : t("admin.products.categories.deleteFailed"),
+                                  variant: "destructive",
+                                })
                               }
                             }}
                             className="text-red-600 hover:text-red-700"

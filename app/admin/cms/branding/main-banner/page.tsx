@@ -34,7 +34,12 @@ export default function AdminMainBannerPage() {
     if (published.heights.mobile !== normalizedDraft.heights.mobile) items.push("Mobile height")
     if (published.heights.tablet !== normalizedDraft.heights.tablet) items.push("Tablet height")
     if (published.heights.desktop !== normalizedDraft.heights.desktop) items.push("Desktop height")
-    if (published.objectPosition !== normalizedDraft.objectPosition) items.push("Focal point")
+    if (published.objectPositionByBreakpoint?.mobile !== normalizedDraft.objectPositionByBreakpoint?.mobile) items.push("Mobile focal point")
+    if (published.objectPositionByBreakpoint?.tablet !== normalizedDraft.objectPositionByBreakpoint?.tablet) items.push("Tablet focal point")
+    if (published.objectPositionByBreakpoint?.desktop !== normalizedDraft.objectPositionByBreakpoint?.desktop) items.push("Desktop focal point")
+    if (published.objectFitByBreakpoint?.mobile !== normalizedDraft.objectFitByBreakpoint?.mobile) items.push("Mobile fit")
+    if (published.objectFitByBreakpoint?.tablet !== normalizedDraft.objectFitByBreakpoint?.tablet) items.push("Tablet fit")
+    if (published.objectFitByBreakpoint?.desktop !== normalizedDraft.objectFitByBreakpoint?.desktop) items.push("Desktop fit")
     if (published.overlay.enabled !== normalizedDraft.overlay.enabled) items.push("Overlay enabled")
     if (published.overlay.enabled && normalizedDraft.overlay.enabled) {
       if (published.overlay.position !== normalizedDraft.overlay.position) items.push("Overlay position")
@@ -170,7 +175,8 @@ export default function AdminMainBannerPage() {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
-      <div className="grid lg:grid-cols-[520px_1fr] gap-6">
+      <div className="grid gap-6">
+        <MainBannerPreview loading={loading} draft={normalizedDraft} canPublish={canPublish} errors={draftErrors} />
         <MainBannerEditor
           loading={loading}
           draft={draft}
@@ -191,7 +197,6 @@ export default function AdminMainBannerPage() {
           onPublish={publish}
           onRevert={revert}
         />
-        <MainBannerPreview loading={loading} draft={normalizedDraft} canPublish={canPublish} errors={draftErrors} />
       </div>
     </div>
   )

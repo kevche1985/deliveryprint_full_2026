@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
-import type { MainBannerConfig } from "@/lib/branding"
+import { resolveMainBannerObjectFit, resolveMainBannerObjectPosition, type MainBannerConfig } from "@/lib/branding"
 import MainBannerFocalCard from "@/components/admin/branding/main-banner-focal-card"
 import MainBannerOverlayCard from "@/components/admin/branding/main-banner-overlay-card"
 
@@ -32,6 +32,8 @@ type Props = {
 }
 
 export default function MainBannerEditor(props: Props) {
+  const previewObjectPosition = resolveMainBannerObjectPosition(props.normalizedDraft, "desktop")
+  const previewObjectFit = resolveMainBannerObjectFit(props.normalizedDraft, "desktop")
   const statusLabel = props.loading
     ? "Loading"
     : props.dirty
@@ -95,7 +97,12 @@ export default function MainBannerEditor(props: Props) {
           </div>
           <div className="rounded-md border overflow-hidden bg-muted">
             {props.normalizedDraft.imageUrl ? (
-              <img src={props.normalizedDraft.imageUrl} alt="Banner" className="w-full h-40 object-cover" style={{ objectPosition: props.normalizedDraft.objectPosition }} />
+              <img
+                src={props.normalizedDraft.imageUrl}
+                alt="Banner"
+                className="w-full h-40"
+                style={{ objectFit: previewObjectFit, objectPosition: previewObjectPosition }}
+              />
             ) : (
               <div className="h-40 flex items-center justify-center text-sm text-muted-foreground">No image</div>
             )}

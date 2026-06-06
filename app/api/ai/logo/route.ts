@@ -37,6 +37,29 @@ export async function POST(request: NextRequest) {
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), settings.timeoutMs)
 
+      const safeReadErrorBody = async (res: Response) => {
+        const ct = res.headers.get("content-type") || ""
+        if (ct.includes("application/json")) {
+          try {
+            return await res.json()
+          } catch {
+            return null
+          }
+        }
+        try {
+          const text = await res.text()
+          return text ? text.slice(0, 800) : null
+        } catch {
+          return null
+        }
+      }
+
+      const looksLikeHtml = (value: unknown) => {
+        if (typeof value !== "string") return false
+        const s = value.trim().slice(0, 64).toLowerCase()
+        return s.startsWith("<!doctype") || s.startsWith("<html")
+      }
+
       // Create a detailed prompt for the logo using the new format
       const prompt = `Create Your Custom Logo
 
@@ -57,7 +80,7 @@ The AI will generate a logo image with:
 The logo should be simple, memorable, and work well at different sizes.
 Create a clean logo with a white background, suitable for a professional business.`
 
-      console.log("Sending request to OpenAI API")
+      console.log("Sending request to AI provider", { provider: settings.provider, model: settings.model })
 
       // Make direct API call to OpenAI
       const response = await fetch(
@@ -82,18 +105,34 @@ Create a clean logo with a white background, suitable for a professional busines
 
       // Handle API errors
       if (!response.ok) {
-        const errorData = await response.json()
-        console.error("OpenAI API error response:", errorData)
-        throw new Error(errorData.error?.message || "Failed to generate logo")
+        const errorBody = await safeReadErrorBody(response)
+        console.error("AI provider API error response:", { status: response.status, body: errorBody })
+        const message =
+          typeof errorBody === "object" && errorBody && "error" in (errorBody as any) && (errorBody as any).error?.message
+            ? (errorBody as any).error.message
+            : typeof errorBody === "string" && errorBody
+              ? errorBody
+              : "Failed to generate logo"
+        if (looksLikeHtml(message)) {
+          throw new Error("AI provider returned HTML. Check the Base URL configured in /admin/settings (it must be an OpenAI-compatible API base, usually ending in /v1).")
+        }
+        throw new Error(message)
+      }
+
+      const responseCt = response.headers.get("content-type") || ""
+      if (!responseCt.includes("application/json")) {
+        const body = await safeReadErrorBody(response)
+        console.error("AI provider returned non-JSON success response", { body })
+        throw new Error("AI provider returned a non-JSON response. Check the Base URL configured in /admin/settings.")
       }
 
       const data = await response.json()
-      console.log("OpenAI API response received successfully")
+      console.log("AI provider API response received successfully")
 
       // Validate response data
       if (!data.data || !data.data[0] || !data.data[0].url) {
-        console.error("Invalid response format from OpenAI:", data)
-        throw new Error("Invalid response format from OpenAI")
+        console.error("Invalid response format from AI provider:", data)
+        throw new Error("Invalid response format from AI provider")
       }
 
       const logoUrl = data.data[0].url
@@ -146,8 +185,8 @@ Create a clean logo with a white background, suitable for a professional busines
           note: "Logo generated but not saved to database",
         })
       }
-    } catch (openaiError) {
-      console.error("OpenAI API error:", openaiError)
+    } catch (providerError) {
+      console.error("AI provider error:", providerError)
 
       // Fall back to mock logo generator if OpenAI fails
       console.log("Falling back to mock logo generator")

@@ -4,7 +4,7 @@ import { useMemo, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
-import type { Breakpoint, MainBannerConfig } from "@/lib/branding"
+import { resolveMainBannerObjectFit, resolveMainBannerObjectPosition, type Breakpoint, type MainBannerConfig } from "@/lib/branding"
 
 type Props = {
   loading: boolean
@@ -13,16 +13,11 @@ type Props = {
   errors: string[]
 }
 
-const viewportWidths: Record<Breakpoint, number> = {
-  mobile: 375,
-  tablet: 768,
-  desktop: 1280,
-}
-
 export default function MainBannerPreview(props: Props) {
   const [viewport, setViewport] = useState<Breakpoint>("desktop")
-  const previewWidth = viewportWidths[viewport]
   const previewHeight = props.draft.heights[viewport]
+  const previewObjectPosition = resolveMainBannerObjectPosition(props.draft, viewport)
+  const previewObjectFit = resolveMainBannerObjectFit(props.draft, viewport)
 
   const overlayBgStyle = useMemo(() => {
     if (!props.draft.overlay.enabled) return undefined
@@ -53,15 +48,15 @@ export default function MainBannerPreview(props: Props) {
         </CardHeader>
         <CardContent>
           <div className="rounded-md border bg-muted/30 p-4 overflow-auto">
-            <div className="mx-auto bg-black/10 rounded-md overflow-hidden" style={{ width: Math.min(previewWidth, 1440), maxWidth: "100%" }}>
+            <div className="w-full bg-black/10 rounded-md overflow-hidden" style={{ maxWidth: "100%" }}>
               <div className="px-4 py-2 text-xs bg-yellow-200 text-yellow-900">Preview — Unpublished changes</div>
               <div className="relative" style={{ height: previewHeight }}>
                 {props.draft.imageUrl ? (
                   <img
                     src={props.draft.imageUrl}
                     alt="Preview banner"
-                    className="absolute inset-0 w-full h-full object-cover"
-                    style={{ objectPosition: props.draft.objectPosition }}
+                    className="absolute inset-0 w-full h-full"
+                    style={{ objectFit: previewObjectFit, objectPosition: previewObjectPosition }}
                   />
                 ) : (
                   <div className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">No banner image</div>
@@ -98,4 +93,3 @@ export default function MainBannerPreview(props: Props) {
     </div>
   )
 }
-

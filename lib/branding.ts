@@ -1,5 +1,7 @@
 export type Breakpoint = "mobile" | "tablet" | "desktop"
 
+export type BannerObjectFit = "cover" | "contain"
+
 export type BannerOverlay = {
   enabled: boolean
   position: "left" | "center" | "right"
@@ -16,6 +18,9 @@ export type MainBannerConfig = {
   imageUrl: string
   heights: Record<Breakpoint, number>
   objectPosition: string
+  objectPositionByBreakpoint?: Partial<Record<Breakpoint, string>>
+  objectFit?: BannerObjectFit
+  objectFitByBreakpoint?: Partial<Record<Breakpoint, BannerObjectFit>>
   overlay: BannerOverlay
 }
 
@@ -33,6 +38,17 @@ export const defaultMainBannerConfig: MainBannerConfig = {
     desktop: 560,
   },
   objectPosition: "50% 50%",
+  objectPositionByBreakpoint: {
+    mobile: "50% 50%",
+    tablet: "50% 50%",
+    desktop: "50% 50%",
+  },
+  objectFit: "cover",
+  objectFitByBreakpoint: {
+    mobile: "cover",
+    tablet: "cover",
+    desktop: "cover",
+  },
   overlay: {
     enabled: false,
     position: "center",
@@ -69,10 +85,39 @@ export function sanitizeObjectPosition(value: unknown, fallback: string): string
   return s
 }
 
+export function resolveMainBannerObjectPosition(config: MainBannerConfig, bp: Breakpoint): string {
+  const base = defaultMainBannerConfig.objectPosition
+  const fallback = sanitizeObjectPosition(config.objectPosition, base)
+  return sanitizeObjectPosition(config.objectPositionByBreakpoint?.[bp], fallback)
+}
+
+export function resolveMainBannerObjectFit(config: MainBannerConfig, bp: Breakpoint): BannerObjectFit {
+  const fallback: BannerObjectFit = config.objectFit === "contain" ? "contain" : "cover"
+  const v = config.objectFitByBreakpoint?.[bp]
+  return v === "contain" || v === "cover" ? v : fallback
+}
+
 export function normalizeMainBannerConfig(input: any): MainBannerConfig {
   const base = defaultMainBannerConfig
   const heightsIn = input?.heights || {}
   const overlayIn = input?.overlay || {}
+  const posIn = input?.objectPositionByBreakpoint || {}
+  const fitIn = input?.objectFit
+  const fitByBpIn = input?.objectFitByBreakpoint || {}
+  const fitFallback: BannerObjectFit = fitIn === "contain" ? "contain" : "cover"
+  const posFallback = sanitizeObjectPosition(input?.objectPosition, base.objectPosition)
+
+  const objectPositionByBreakpoint: Record<Breakpoint, string> = {
+    mobile: sanitizeObjectPosition(posIn.mobile, posFallback),
+    tablet: sanitizeObjectPosition(posIn.tablet, posFallback),
+    desktop: sanitizeObjectPosition(posIn.desktop, posFallback),
+  }
+
+  const objectFitByBreakpoint: Record<Breakpoint, BannerObjectFit> = {
+    mobile: fitByBpIn.mobile === "contain" || fitByBpIn.mobile === "cover" ? fitByBpIn.mobile : fitFallback,
+    tablet: fitByBpIn.tablet === "contain" || fitByBpIn.tablet === "cover" ? fitByBpIn.tablet : fitFallback,
+    desktop: fitByBpIn.desktop === "contain" || fitByBpIn.desktop === "cover" ? fitByBpIn.desktop : fitFallback,
+  }
 
   const out: MainBannerConfig = {
     imageUrl: typeof input?.imageUrl === "string" ? input.imageUrl.trim() : base.imageUrl,
@@ -81,7 +126,10 @@ export function normalizeMainBannerConfig(input: any): MainBannerConfig {
       tablet: clamp(coerceInt(heightsIn.tablet, base.heights.tablet), 100, 1200),
       desktop: clamp(coerceInt(heightsIn.desktop, base.heights.desktop), 100, 1200),
     },
-    objectPosition: sanitizeObjectPosition(input?.objectPosition, base.objectPosition),
+    objectPosition: objectPositionByBreakpoint.desktop,
+    objectPositionByBreakpoint,
+    objectFit: fitFallback,
+    objectFitByBreakpoint,
     overlay: {
       enabled: !!overlayIn.enabled,
       position: overlayIn.position === "left" || overlayIn.position === "right" || overlayIn.position === "center" ? overlayIn.position : base.overlay.position,
@@ -138,4 +186,3 @@ function isInRange(n: number, min: number, max: number) {
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n))
 }
-
