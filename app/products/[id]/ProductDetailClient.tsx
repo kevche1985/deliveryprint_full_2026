@@ -243,22 +243,32 @@ export default function ProductDetailClient({
 
   const maxQuantityAllowed = useMemo(() => {
     if (!rangeTierMode) return 999
-    const caps: number[] = []
-    legacyTiers.forEach((t) => {
-      if (t.maxQuantity != null && Number.isFinite(t.maxQuantity) && t.maxQuantity > 0) caps.push(t.maxQuantity)
-    })
+    const GLOBAL_MAX = 50000
+    const setCaps: number[] = []
+
+    const getSetCap = (tiers: { maxQuantity?: number | null }[]) => {
+      const finite = tiers
+        .map((t) => t.maxQuantity)
+        .filter((v): v is number => typeof v === "number" && Number.isFinite(v) && v > 0)
+      if (!finite.length) return GLOBAL_MAX
+      return Math.max(...finite)
+    }
+
+    if (legacyTiers.length > 0) {
+      setCaps.push(getSetCap(legacyTiers))
+    }
+
     for (const group of variantGroups) {
       const selectedOptionId = selectedOptions[group.id]
       const option = group.options.find((o) => o.id === selectedOptionId)
       const tiers = normalizeTiers(option?.tier_pricing)
       const mode = getTierMode(option?.tier_pricing, tiers)
       if (mode !== "range") continue
-      tiers.forEach((t) => {
-        if (t.maxQuantity != null && Number.isFinite(t.maxQuantity) && t.maxQuantity > 0) caps.push(t.maxQuantity)
-      })
+      if (tiers.length > 0) setCaps.push(getSetCap(tiers))
     }
-    if (caps.length) return Math.max(1, Math.min(...caps))
-    return 50000
+
+    if (!setCaps.length) return GLOBAL_MAX
+    return Math.max(1, Math.min(...setCaps))
   }, [rangeTierMode, legacyTiers, variantGroups, selectedOptions])
 
   useEffect(() => {
