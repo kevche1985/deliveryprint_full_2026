@@ -61,7 +61,7 @@ export async function POST(request: Request) {
     const { error: orderError } = await supabaseServer
       .from("orders")
       .update({
-        status: "confirmed", // Update to confirmed status after payment
+        status: "pending", // Keep newly paid orders pending for operator processing
         payment_method: "paypal", // Set payment method to paypal
         notes: `PayPal payment completed. Transaction ID: ${paypalTransactionId || paypalOrderId}. Amount: $${amount}. Status: ${status}. Payment Date: ${new Date().toISOString()}`,
         updated_at: new Date().toISOString(),

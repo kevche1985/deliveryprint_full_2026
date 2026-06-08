@@ -63,7 +63,10 @@ export async function POST(req: NextRequest) {
     }
 
     // 1. Update the order status on the server using service role
-    const paymentStatusValue = paymentStatus || 'completed'
+    const normalizedPaymentStatus = (paymentStatus || "completed").toLowerCase()
+    const paymentStatusValue = ["completed", "confirmed", "paid", "succeeded", "success"].includes(normalizedPaymentStatus)
+      ? "pending"
+      : normalizedPaymentStatus
     const { data: updatedOrder, error: updateErr } = await supabaseServer
       .from('orders')
       .update({ status: paymentStatusValue, updated_at: new Date().toISOString() })

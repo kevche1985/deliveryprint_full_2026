@@ -131,7 +131,7 @@ export async function POST(request: NextRequest) {
           await supabase
             .from("orders")
             .update({
-              status: "confirmed",
+              status: "pending",
               payment_method: "wompi",
               updated_at: new Date().toISOString(),
             })

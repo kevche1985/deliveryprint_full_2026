@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -10,26 +11,44 @@ import { motion } from "framer-motion"
 import { supabase } from "@/lib/supabase"
 import { useLanguage } from "@/lib/language-context"
 
-// Sample data - in a real app, this would come from your database
-const revenueData = [
-  { month: "Jan", revenue: 4000, orders: 45 },
-  { month: "Feb", revenue: 3000, orders: 38 },
-  { month: "Mar", revenue: 5000, orders: 62 },
-  { month: "Apr", revenue: 4500, orders: 55 },
-  { month: "May", revenue: 6000, orders: 71 },
-  { month: "Jun", revenue: 5500, orders: 68 },
-]
+type DashboardStats = {
+  totalRevenue: number
+  totalOrders: number
+  totalUsers: number
+  totalProducts: number
+  pendingOrders: number
+  completedOrders: number
+  pendingQuotes: number
+  activeUsers: number
+}
 
-const orderStatusData = [
-  { name: "Completed", value: 45, color: "#10B981" },
-  { name: "Processing", value: 23, color: "#3B82F6" },
-  { name: "Pending", value: 18, color: "#F59E0B" },
-  { name: "Cancelled", value: 4, color: "#EF4444" },
-]
+type DashboardData = {
+  stats: DashboardStats
+  changes: Record<string, number>
+  revenueData: Array<{ month: string; revenue: number; orders: number }>
+  orderStatusData: Array<{ name: string; value: number; color: string }>
+  recentOrders: Array<{
+    id: string
+    order_number: string
+    email: string
+    total: number
+    status: string
+    created_at: string
+  }>
+  recentUsers: Array<{
+    id: string
+    first_name: string
+    last_name: string
+    email: string
+    role: string
+    status: string
+    created_at: string
+  }>
+}
 
 export default function AdminDashboard() {
   const { t } = useLanguage()
-  const [stats, setStats] = useState({
+  const [stats, setStats] = useState<DashboardStats>({
     totalRevenue: 0,
     totalOrders: 0,
     totalUsers: 0,
@@ -39,43 +58,48 @@ export default function AdminDashboard() {
     pendingQuotes: 0,
     activeUsers: 0,
   })
+  const [changes, setChanges] = useState<Record<string, number>>({
+    totalRevenue: 0,
+    totalOrders: 0,
+    totalUsers: 0,
+    totalProducts: 0,
+  })
+  const [revenueData, setRevenueData] = useState<Array<{ month: string; revenue: number; orders: number }>>([])
+  const [orderStatusData, setOrderStatusData] = useState<Array<{ name: string; value: number; color: string }>>([])
+  const [recentOrders, setRecentOrders] = useState<DashboardData["recentOrders"]>([])
+  const [recentUsers, setRecentUsers] = useState<DashboardData["recentUsers"]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function loadDashboardData() {
       try {
-        // Get orders data
-        const { data: orders } = await supabase.from("orders").select("*")
+        let token = ""
+        for (let attempt = 0; attempt < 5; attempt++) {
+          const {
+            data: { session },
+          } = await supabase.auth.getSession()
+          token = session?.access_token || ""
+          if (token) break
+          await new Promise((resolve) => setTimeout(resolve, 250))
+        }
 
-        // Get users data
-        const { data: users } = await supabase.from("user_profiles").select("*")
-
-        // Get products data
-        const { data: products } = await supabase.from("products").select("*")
-
-        // Get quotes data
-        const { data: quotes } = await supabase.from("quotes").select("*")
-
-        // Calculate stats
-        const totalRevenue = orders?.reduce((sum, order) => sum + (order.total || 0), 0) || 0
-        const totalOrders = orders?.length || 0
-        const totalUsers = users?.length || 0
-        const totalProducts = products?.length || 0
-        const pendingOrders = orders?.filter((order) => order.status === "pending").length || 0
-        const completedOrders = orders?.filter((order) => order.status === "completed").length || 0
-        const pendingQuotes = quotes?.filter((quote) => quote.status === "pending").length || 0
-        const activeUsers = users?.filter((user) => user.status === "active").length || 0
-
-        setStats({
-          totalRevenue,
-          totalOrders,
-          totalUsers,
-          totalProducts,
-          pendingOrders,
-          completedOrders,
-          pendingQuotes,
-          activeUsers,
+        const response = await fetch("/api/admin/dashboard", {
+          cache: "no-store",
+          credentials: "include",
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         })
+
+        if (!response.ok) {
+          throw new Error(`Failed to load dashboard: ${response.status}`)
+        }
+
+        const data: DashboardData = await response.json()
+        setStats(data.stats)
+        setChanges(data.changes || {})
+        setRevenueData(data.revenueData || [])
+        setOrderStatusData(data.orderStatusData || [])
+        setRecentOrders(data.recentOrders || [])
+        setRecentUsers(data.recentUsers || [])
       } catch (error) {
         console.error("Error loading dashboard data:", error)
       } finally {
@@ -86,33 +110,38 @@ export default function AdminDashboard() {
     loadDashboardData()
   }, [])
 
+  const formatChange = (value: number) => {
+    const sign = value > 0 ? "+" : ""
+    return `${sign}${value.toFixed(1)}%`
+  }
+
   const statCards = [
     {
       title: t("admin.dashboard.statCards.totalRevenue"),
       value: `$${stats.totalRevenue.toFixed(2)}`,
-      change: "+12.5%",
-      changeType: "positive",
+      change: formatChange(changes.totalRevenue || 0),
+      changeType: (changes.totalRevenue || 0) >= 0 ? "positive" : "negative",
       icon: DollarSign,
     },
     {
       title: t("admin.dashboard.statCards.totalOrders"),
       value: stats.totalOrders.toString(),
-      change: "+8.2%",
-      changeType: "positive",
+      change: formatChange(changes.totalOrders || 0),
+      changeType: (changes.totalOrders || 0) >= 0 ? "positive" : "negative",
       icon: ShoppingCart,
     },
     {
       title: t("admin.dashboard.statCards.totalUsers"),
       value: stats.totalUsers.toString(),
-      change: "+15.3%",
-      changeType: "positive",
+      change: formatChange(changes.totalUsers || 0),
+      changeType: (changes.totalUsers || 0) >= 0 ? "positive" : "negative",
       icon: Users,
     },
     {
       title: t("admin.dashboard.statCards.totalProducts"),
       value: stats.totalProducts.toString(),
-      change: "+2.1%",
-      changeType: "positive",
+      change: formatChange(changes.totalProducts || 0),
+      changeType: (changes.totalProducts || 0) >= 0 ? "positive" : "negative",
       icon: Package,
     },
   ]
@@ -147,6 +176,28 @@ export default function AdminDashboard() {
       bgColor: "bg-purple-100",
     },
   ]
+
+  const getOrderBadgeVariant = (status: string) => {
+    switch (status) {
+      case "completed":
+        return "bg-green-100 text-green-700"
+      case "pending":
+        return "bg-yellow-100 text-yellow-700"
+      case "processing":
+        return "bg-blue-100 text-blue-700"
+      case "cancelled":
+        return "bg-red-100 text-red-700"
+      default:
+        return "bg-gray-100 text-gray-700"
+    }
+  }
+
+  const getUserInitials = (firstName: string, lastName: string, email: string) => {
+    const first = firstName?.trim()?.charAt(0) || ""
+    const last = lastName?.trim()?.charAt(0) || ""
+    const fallback = email?.trim()?.charAt(0) || "U"
+    return `${first}${last}`.trim() || fallback.toUpperCase()
+  }
 
   return (
     <div className="space-y-6 -mt-6">
@@ -278,21 +329,24 @@ export default function AdminDashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {[1, 2, 3, 4, 5].map((i) => (
-                <div key={i} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+              {recentOrders.map((order) => (
+                <div key={order.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                   <div>
-                    <p className="font-medium">Order #ORD-{1000 + i}</p>
-                    <p className="text-sm text-gray-600">Customer {i}</p>
+                    <p className="font-medium">Order #{order.order_number}</p>
+                    <p className="text-sm text-gray-600">{order.email}</p>
                   </div>
                   <div className="text-right">
-                    <p className="font-medium">${(Math.random() * 100 + 20).toFixed(2)}</p>
-                    <Badge variant="secondary">Processing</Badge>
+                    <p className="font-medium">${order.total.toFixed(2)}</p>
+                    <Badge className={getOrderBadgeVariant(order.status)}>
+                      {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                    </Badge>
                   </div>
                 </div>
               ))}
+              {!loading && recentOrders.length === 0 && <p className="text-sm text-gray-500">No recent orders</p>}
             </div>
-            <Button variant="outline" className="w-full mt-4">
-              View All Orders
+            <Button asChild variant="outline" className="w-full mt-4">
+              <Link href="/admin/orders">View All Orders</Link>
             </Button>
           </CardContent>
         </Card>
@@ -305,23 +359,24 @@ export default function AdminDashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {[1, 2, 3, 4, 5].map((i) => (
-                <div key={i} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+              {recentUsers.map((user) => (
+                <div key={user.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                   <div className="flex items-center">
                     <div className="w-8 h-8 bg-[#8B0000] rounded-full flex items-center justify-center text-white text-sm font-medium mr-3">
-                      U{i}
+                      {getUserInitials(user.first_name, user.last_name, user.email)}
                     </div>
                     <div>
-                      <p className="font-medium">User {i}</p>
-                      <p className="text-sm text-gray-600">user{i}@example.com</p>
+                      <p className="font-medium">{`${user.first_name} ${user.last_name}`.trim() || "Unnamed User"}</p>
+                      <p className="text-sm text-gray-600">{user.email}</p>
                     </div>
                   </div>
-                  <Badge variant="secondary">Customer</Badge>
+                  <Badge variant="secondary">{user.role.charAt(0).toUpperCase() + user.role.slice(1)}</Badge>
                 </div>
               ))}
+              {!loading && recentUsers.length === 0 && <p className="text-sm text-gray-500">No recent users</p>}
             </div>
-            <Button variant="outline" className="w-full mt-4">
-              View All Users
+            <Button asChild variant="outline" className="w-full mt-4">
+              <Link href="/admin/users">View All Users</Link>
             </Button>
           </CardContent>
         </Card>

@@ -183,10 +183,10 @@ export async function POST(req: Request, { params }: { params: { reference: stri
       .update({ status: "completed", order_id: createdOrder.id, updated_at: nowIso })
       .eq("id", sessionRow.id)
 
-    // Optionally advance order status to confirmed now that payment is completed
+    // Keep newly paid orders in pending so operators can pick them up as new work.
     await (supabaseServer as any)
       .from("orders")
-      .update({ status: "confirmed", updated_at: new Date().toISOString() })
+      .update({ status: "pending", updated_at: new Date().toISOString() })
       .eq("id", createdOrder.id)
 
     // Record into unified payment_transactions for Admin view

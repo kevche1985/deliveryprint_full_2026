@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -74,6 +75,7 @@ type Order = {
 export default function OrderManagement() {
   const { t } = useLanguage()
   const { toast } = useToast()
+  const router = useRouter()
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
@@ -86,18 +88,32 @@ export default function OrderManagement() {
     loadOrders()
   }, [])
 
+  const getAccessTokenWithRetry = async () => {
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+
+      const token = session?.access_token
+      if (token) return token
+
+      await new Promise((resolve) => setTimeout(resolve, 250))
+    }
+    return ""
+  }
+
   const loadOrders = async () => {
     try {
-      let token = ""
-      try {
-        const { data: { session } } = await supabase.auth.getSession()
-        token = session?.access_token || ""
-      } catch {}
+      const token = await getAccessTokenWithRetry()
+      if (!token) {
+        router.push("/auth/login?redirect=/admin/orders")
+        return
+      }
 
       const resp = await fetch("/api/admin/orders", {
         cache: "no-store",
         credentials: "include",
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        headers: { Authorization: `Bearer ${token}` },
       })
 
       if (!resp.ok) {

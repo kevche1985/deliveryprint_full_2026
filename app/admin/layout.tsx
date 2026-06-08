@@ -133,10 +133,8 @@ function AdminContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
 
   useEffect(() => {
-    // Simple auth check without useAuth hook
     const checkAuth = async () => {
       try {
-        // Import supabase here to avoid SSR issues
         const { supabase } = await import("@/lib/supabase")
 
         const {
@@ -149,28 +147,26 @@ function AdminContent({ children }: { children: React.ReactNode }) {
         }
 
         setUser(session.user)
+        const { data: profileData, error: profileError } = await supabase
+          .from("user_profiles")
+          .select("id, first_name, last_name, email, role, status")
+          .eq("id", session.user.id)
+          .single()
 
-        // For admin@example.com, set admin profile directly
-        if (session.user.email === "admin@example.com") {
-          setProfile({
-            id: session.user.id,
-            first_name: "Admin",
-            last_name: "User",
-            email: session.user.email ?? "",
-            role: "admin",
-            status: "active",
-          })
-        } else {
-          // For other users, create fallback profile
-          setProfile({
-            id: session.user.id,
-            first_name: "User",
-            last_name: "",
-            email: session.user.email ?? "",
-            role: "customer",
-            status: "active",
-          })
+        if (profileError || !profileData) {
+          setProfile(null)
+          setLoading(false)
+          return
         }
+
+        setProfile({
+          id: profileData.id,
+          first_name: profileData.first_name || "User",
+          last_name: profileData.last_name || "",
+          email: profileData.email || session.user.email || "",
+          role: profileData.role || "customer",
+          status: profileData.status || "active",
+        })
 
         setLoading(false)
       } catch (error) {
@@ -330,6 +326,7 @@ function AdminContent({ children }: { children: React.ReactNode }) {
                 <div className="mt-2 space-y-1">
                   {[
                     { href: "/admin/users", icon: Users, title: t("admin.nav.users") },
+                    { href: "/admin/quotes", icon: FileText, title: t("admin.nav.quotes") },
                     { href: "/admin/messages", icon: MessageSquare, title: t("admin.nav.messages") },
                   ].map((item) => {
                     const active = pathname?.startsWith(item.href)
@@ -372,6 +369,7 @@ function AdminContent({ children }: { children: React.ReactNode }) {
                     { href: "/admin/widgets", icon: Puzzle, title: "Widgets" },
                     { href: "/admin/modules", icon: Settings, title: "Modules" },
                     { href: "/admin/settings", icon: Settings, title: "Settings" },
+                    { href: "/admin/email-settings", icon: Mail, title: "Email Settings" },
                   ].map((item) => {
                     const active = pathname?.startsWith(item.href)
                     return (

@@ -58,7 +58,7 @@ export async function POST(request: Request) {
         const { error: orderError } = await supabase
           .from("orders")
           .update({
-            status: "confirmed",
+            status: "pending",
             payment_method: "paypal",
             payment_id: orderID,
             updated_at: new Date().toISOString(),

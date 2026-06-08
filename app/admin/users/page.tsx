@@ -62,13 +62,50 @@ export default function UserManagement() {
     loadUsers()
   }, [])
 
+  const getAuthHeaders = async (includeJson = false) => {
+    let token = ""
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+      token = session?.access_token || ""
+      if (token) break
+      await new Promise((resolve) => setTimeout(resolve, 250))
+    }
+
+    const headers: Record<string, string> = {}
+    if (includeJson) {
+      headers["Content-Type"] = "application/json"
+    }
+    if (token) {
+      headers.Authorization = `Bearer ${token}`
+    }
+    return headers
+  }
+
+  const resetForm = () => {
+    setFormData({
+      first_name: "",
+      last_name: "",
+      email: "",
+      phone: "",
+      role: "customer",
+      status: "active",
+    })
+    setEditingUser(null)
+  }
+
   const loadUsers = async () => {
     try {
       setLoading(true)
-      const response = await fetch('/api/admin/users')
+      const response = await fetch("/api/admin/users", {
+        cache: "no-store",
+        credentials: "include",
+        headers: await getAuthHeaders(),
+      })
       
       if (!response.ok) {
-        throw new Error('Failed to fetch users')
+        throw new Error("Failed to fetch users")
       }
       
       const data = await response.json()
@@ -99,14 +136,15 @@ export default function UserManagement() {
       }
 
       if (editingUser) {
-        const response = await fetch('/api/admin/users', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...userData, id: editingUser.id })
+        const response = await fetch("/api/admin/users", {
+          method: "PUT",
+          credentials: "include",
+          headers: await getAuthHeaders(true),
+          body: JSON.stringify({ ...userData, id: editingUser.id, current_email: editingUser.email }),
         })
         
         if (!response.ok) {
-          throw new Error('Failed to update user')
+          throw new Error("Failed to update user")
         }
 
         toast({
@@ -114,14 +152,15 @@ export default function UserManagement() {
           description: "User updated successfully",
         })
       } else {
-        const response = await fetch('/api/admin/users', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(userData)
+        const response = await fetch("/api/admin/users", {
+          method: "POST",
+          credentials: "include",
+          headers: await getAuthHeaders(true),
+          body: JSON.stringify(userData),
         })
         
         if (!response.ok) {
-          throw new Error('Failed to create user')
+          throw new Error("Failed to create user")
         }
 
         toast({
@@ -154,7 +193,9 @@ export default function UserManagement() {
 
     try {
       const response = await fetch(`/api/admin/users?id=${user.id}&hard=${hard}`, {
-        method: 'DELETE'
+        method: "DELETE",
+        credentials: "include",
+        headers: await getAuthHeaders(),
       })
       
       if (!response.ok) {
@@ -183,7 +224,7 @@ export default function UserManagement() {
     setFormData({
       first_name: user.first_name,
       last_name: user.last_name,
-      email: user.email || user.user_email || "", // Handle both email fields
+      email: user.email || "",
       phone: user.phone || "",
       role: user.role,
       status: user.status,
@@ -193,9 +234,30 @@ export default function UserManagement() {
 
   const handleStatusChange = async (userId: string, newStatus: "active" | "suspended" | "pending") => {
     try {
-      const { error } = await supabase.from("user_profiles").update({ status: newStatus }).eq("id", userId)
+      const user = users.find((entry) => entry.id === userId)
+      if (!user) {
+        throw new Error("User not found")
+      }
 
-      if (error) throw error
+      const response = await fetch("/api/admin/users", {
+        method: "PUT",
+        credentials: "include",
+        headers: await getAuthHeaders(true),
+        body: JSON.stringify({
+          id: user.id,
+          first_name: user.first_name,
+          last_name: user.last_name,
+          email: user.email,
+          current_email: user.email,
+          phone: user.phone,
+          role: user.role,
+          status: newStatus,
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error("Failed to update user status")
+      }
 
       toast({
         title: "Success",
@@ -253,7 +315,7 @@ export default function UserManagement() {
     const matchesSearch =
       user.first_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       user.last_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (user.user_email && user.user_email.toLowerCase().includes(searchQuery.toLowerCase()))
+      (user.email && user.email.toLowerCase().includes(searchQuery.toLowerCase()))
     const matchesRole = roleFilter === "all" || user.role === roleFilter
     const matchesStatus = statusFilter === "all" || user.status === statusFilter
     return matchesSearch && matchesRole && matchesStatus
@@ -497,7 +559,7 @@ export default function UserManagement() {
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell>{user.user_email}</TableCell>
+                    <TableCell>{user.email}</TableCell>
                     <TableCell>
                       <div className="flex items-center space-x-2">
                         <RoleIcon className="h-4 w-4" />
@@ -565,16 +627,4 @@ export default function UserManagement() {
       </Card>
     </div>
   )
-}
-
-const resetForm = () => {
-  setFormData({
-    first_name: "",
-    last_name: "",
-    email: "",
-    phone: "",
-    role: "customer",
-    status: "active",
-  })
-  setEditingUser(null)
 }

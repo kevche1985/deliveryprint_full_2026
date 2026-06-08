@@ -162,7 +162,7 @@ export async function POST(request: NextRequest) {
         await supabaseServer
           .from("orders")
           .update({
-            status: "paid",
+            status: "pending",
             updated_at: new Date().toISOString(),
           })
           .eq("id", orderId)

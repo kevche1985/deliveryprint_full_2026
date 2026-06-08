@@ -152,6 +152,8 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
+    const auth = await requireRole(request as any, ["admin", "operator"])
+    if (!auth.ok) return NextResponse.json({ error: 'Unauthorized' }, { status: auth.status })
     const supabase = createClient()
     const body = await request.json()
     
@@ -204,6 +206,8 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    const auth = await requireRole(request as any, ["admin", "operator"])
+    if (!auth.ok) return NextResponse.json({ error: 'Unauthorized' }, { status: auth.status })
     const supabase = createClient()
     const { searchParams } = new URL(request.url)
     let id = searchParams.get('id')

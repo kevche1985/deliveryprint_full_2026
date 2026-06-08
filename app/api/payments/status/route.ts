@@ -109,7 +109,7 @@ export async function GET(request: NextRequest) {
         await supabase
           .from("orders")
           .update({
-            status: "confirmed",
+            status: "pending",
             updated_at: new Date().toISOString(),
           })
           .eq("id", order.id)
