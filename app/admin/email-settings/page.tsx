@@ -55,6 +55,44 @@ interface EmailLog {
   created_at: string
 }
 
+const previewValues: Record<string, string> = {
+  customer_name: "John Doe",
+  first_name: "John",
+  last_name: "Doe",
+  order_number: "ORD-1001",
+  quote_number: "QT-1001",
+  order_date: "2026-06-08",
+  valid_until: "2026-06-15",
+  total_amount: "25.00",
+  payment_method: "Card Payment",
+  estimated_delivery: "2-3 business days",
+  order_url: "https://deliveryprint.com/orders/ORD-1001",
+  admin_url: "https://deliveryprint.com/admin",
+  dashboard_url: "https://deliveryprint.com/dashboard",
+  site_name: "DeliveryPrint",
+  company_name: "DeliveryPrint",
+  current_year: "2026",
+  timestamp: "2026-06-08 10:00:00 UTC",
+  status: "Pending",
+  status_class: "pending",
+  update_date: "2026-06-08",
+  tracking_number: "TRK-1001",
+  status_message: "Your order is queued and ready for operator review.",
+}
+
+function renderTemplatePreview(template: string, variables: string[] = []) {
+  let output = template || ""
+
+  const variableMap = new Map<string, string>()
+  for (const variable of variables) {
+    variableMap.set(variable, previewValues[variable] || `[${variable}]`)
+  }
+
+  return output.replace(/{{\s*([\w.]+)\s*}}/g, (_, variableName: string) => {
+    return variableMap.get(variableName) || previewValues[variableName] || `[${variableName}]`
+  })
+}
+
 export default function EmailSettingsPage() {
   const { user, loading: authLoading } = useAuth()
   const router = useRouter()
@@ -446,6 +484,16 @@ export default function EmailSettingsPage() {
     return <Badge variant={variants[status as keyof typeof variants] || "secondary"}>{status}</Badge>
   }
 
+  const previewSubject = selectedTemplate
+    ? renderTemplatePreview(selectedTemplate.subject_template, selectedTemplate.variables)
+    : ""
+  const previewHtml = selectedTemplate
+    ? renderTemplatePreview(selectedTemplate.html_template, selectedTemplate.variables)
+    : ""
+  const previewText = selectedTemplate?.text_template
+    ? renderTemplatePreview(selectedTemplate.text_template, selectedTemplate.variables)
+    : ""
+
   // Show loading while checking authentication
   if (authLoading) {
     return (
@@ -807,6 +855,56 @@ export default function EmailSettingsPage() {
                 </Button>
                 </DialogFooter>
                 </DialogContent>
+                </Dialog>
+
+                <Dialog open={!!selectedTemplate} onOpenChange={(open) => !open && setSelectedTemplate(null)}>
+                  <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                      <DialogTitle>{selectedTemplate?.template_name || "Template Preview"}</DialogTitle>
+                      <DialogDescription>
+                        Preview of the email message that will be sent with sample values.
+                      </DialogDescription>
+                    </DialogHeader>
+
+                    {selectedTemplate && (
+                      <div className="space-y-6">
+                        <div className="space-y-2">
+                          <Label>Subject Preview</Label>
+                          <div className="rounded-md border bg-gray-50 px-4 py-3 text-sm font-medium">{previewSubject}</div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label>HTML Email Preview</Label>
+                          <iframe
+                            title="Email HTML Preview"
+                            className="h-[420px] w-full rounded-md border bg-white"
+                            sandbox=""
+                            srcDoc={previewHtml}
+                          />
+                        </div>
+
+                        {previewText && (
+                          <div className="space-y-2">
+                            <Label>Plain Text Preview</Label>
+                            <pre className="whitespace-pre-wrap rounded-md border bg-gray-50 p-4 text-sm">
+                              {previewText}
+                            </pre>
+                          </div>
+                        )}
+
+                        <div className="space-y-2">
+                          <Label>Sample Variables</Label>
+                          <div className="flex flex-wrap gap-2">
+                            {selectedTemplate.variables.map((variable) => (
+                              <Badge key={variable} variant="outline">
+                                {variable}: {previewValues[variable] || `[${variable}]`}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </DialogContent>
                 </Dialog>
 
                 {connectionStatus && (
